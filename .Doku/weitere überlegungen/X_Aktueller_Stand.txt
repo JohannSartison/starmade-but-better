@@ -1,0 +1,26 @@
+Aktueller Stand (Projekt)
+
+Stand: 2025-12-27
+
+Kurzüberblick
+- Galaxie-Karte (UI): Prozedurale 3D-Galaxie (MultiMesh), Bedienung mit M öffnen/schließen, Mausrad Zoom, MMB Pan, LMB Orbit-Rotation, Rechtsklick Auswahl/Info, System-View per Doppelklick oder Zoom-Schwelle, Navigationsziel + Warp ins Zielsystem.
+- Gameplay-Systemwelt: Startsystem ist konfigurierbar; SystemWorld instanziert Sonne + Planeten im Gameplay (simple Meshes, Planeten orbitieren) und zeigt Sky-Starfield („andere Systeme als Sterne“) inkl. Zielsystem-Marker.
+- Gameplay-Sky: Skybox per 360°-Panorama (equirectangular) über `WorldEnvironment` (Background Mode = Sky / `PanoramaSkyMaterial`). Die prozedurale Sky-Sphere wurde zurückgebaut; sichtbar bleibt das Sky-Starfield (andere Systeme als Sterne) + Marker. Sky-Radius wird laufend neu berechnet und das Starfield bei Radiusänderung neu aufgebaut; Starfield/Marker richten sich jetzt am Spieler aus (player-zentriert), auch außerhalb eines Systems.
+- Beleuchtung: Sonnenlicht-Reichweite wird zur Laufzeit anhand Spielerabstand/Gameplay-Radius nachgeführt, damit Objekte auch bei weiten Flügen sichtbar bleiben.
+- Beleuchtung: In leeren Zellen wird ein leichtes Ambient-Licht gesetzt, damit Objekte nicht komplett schwarz sind.
+- Asteroidenfeld: Einfache Mesh-Asteroiden werden zellenbasiert um den Spieler gestreamt (Budget + Update-Intervall).
+- System-Objekte-HUD: Listet weiterhin alle Objekte im aktuellen System; außerhalb nur Objekte in den 26 Nachbarzellen der Galaxy-Grid (Richtungsanzeige).
+- Info-Panel: Zeigt Systemdaten (Name/ID, Sternklasse, Planeten, Galaxy-Zelle) und im Pilotenmodus die Schiffsgeschwindigkeit; Debug-Zeile mit Systemdistanz/Grenze für Auto-Wechsel.
+- Auto-Systemwechsel: Zellbasierte Grenze (Chunk-Groesse x20) mit 5% Hysterese; Debug zeigt Zell-Distanz/Grenze.
+- Galaxy-Map/System-View: Chunk-Wuerfel zeigt System-Position innerhalb der Zelle; Start-/Ziel-Fokus ist auf den Chunk begrenzt.
+- Skalierung: Sky-Sphere-Basis/Padding folgen der Chunk-Skala; System-Welt-Skala koppelt an die Chunk-Groesse (mit Fit auf Chunk-Radius).
+- Galaxy-Map-Positionen: Grid um eine halbe Zelle verschoben (Zellzentrum bei 0,0,0), damit Systeme innerhalb ihrer Zellen nicht an den Raendern kleben.
+- Leere Zellen: Werden als "System" ohne Stern/Planeten gefuehrt (Auto-Wechsel/Objektliste/Marker funktionieren), Savegame speichert aktuelle Zelle.
+- Voxel-Building (MVP): Ghost-Preview beim Anvisieren; LMB hält Fläche/Ankerpunkt gelockt; Extrude/Scale in 0.2-Schritten; Rotation während Platzierung per WASD (90°); Overlap-Check; Abbau per Rechtsklick; Core wird aktuell per Doppelklick im Inventar gespawnt (Ausrichtung folgt Spieler/Ship-Body, Struktur rotiert statt Core-Block).
+- Schiffssteuerung (MVP): Mit F auf Core-Block ein/aussteigen; Kamera sitzt am Core und folgt der Strukturrotation; Maus rotiert den Core (Deadzone-Ring + Cursor-Dot, Maus-Offset skaliert bis Fensterrand, lineare Stärke, Zentrierung im Ring, gedämpftes Einfangen ohne Overshoot, Rotationsbremse bei zentriertem Cursor), WASD/Space/Shift beschleunigen über Thruster (Trägheit, Vortrieb ohne ungewollte Drehung, Stabil-Modus nutzt ausgerichtete Gesamtstärke), Q/E rollt über Thruster; ESC-Menü: Umschalter für realistische Thruster-Torque vs stabilen Vortrieb + Thruster-Diagnose (Ausrichtung/effektive Stärke); Core-Frontmarkierung als Ring auf der Frontfläche des Blocks; Build-Eingaben sind während des Pilotens gesperrt.
+- UI/Icons: Hotbar blockiert Build-Klicks nicht im Mouse-Captured Modus; aktiver Slot ist markiert; Slot-Icons sind 3D-Miniaturen (Icon-Viewport mit Edge-Pass).
+- Grafik-Look (Richtung): Cel/Toon als Ziel (harte Lichtstufen), Screen-Space Outlines (World + Icon-Viewport), zusätzliche Face-Edge-Betonung in Voxel-Shadern.
+
+Pflege (leichtgewichtig)
+- Diese Datei ist der „schnelle Gesamtüberblick“ und wird bei größeren Meilensteinen aktualisiert.
+- Details bleiben in den passenden Konzept-/Arbeitsdokumenten (z.B. `Doku/X_Spielplatz.txt`, `Doku/X_GalaxyGenerator.txt`, `Doku/X_Grafik_Stil.txt`).

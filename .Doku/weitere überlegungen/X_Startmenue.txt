@@ -1,0 +1,89 @@
+Startmenü (Boot/Session-Setup) – Konzept & Plan
+
+Stand: 2025-12-27
+
+Ist-Zustand (Implementiert)
+- SaveService unterstützt World-Slots:
+	- Index: `user://worlds/index.json`
+	- Save pro Welt: `user://worlds/<world_id>.json`
+- Startmenü ist vorhanden:
+	- Scene: `ui/start_menu.tscn`
+	- Script: `scripts/ui_start_menu.gd`
+	- Auswahl: Modus (Flat/VR) + Session (Local/Online)
+	- Local: Welten-Liste + Neu/Umbenennen/Löschen + Start
+	- Online: Server-Bookmarks (`user://servers.json`) + Hinzufügen/Bearbeiten/Löschen + Join
+- Spielstart wurde umgestellt (`scripts/main.gd`):
+	- Startet im Startmenü; Gameplay-UI ist bis zur Auswahl verborgen.
+	- Player-Input/Physics ist bis zur Auswahl deaktiviert.
+	- Saves werden nur im Local-Mode geschrieben (Online schreibt nicht lokal).
+	- Legacy-Import: Wenn `user://savegame.json` existiert und die gewählte Welt noch keinen Save hat, wird der Legacy-Save beim Start in den Welt-Slot kopiert (nur bei passender `save_version`).
+
+Ziel
+- Beim Start soll ein Startmenü erscheinen, bevor das Gameplay läuft.
+- Der Spieler wählt:
+	- Modus: Flat (Desktop) oder VR
+	- Session: Local (Singleplayer) oder Online (Server beitreten)
+- Local:
+	- Liste erstellter Welten (Save-Slots) anzeigen.
+	- Welt erstellen / löschen / (optional) umbenennen.
+	- Startet das Spiel in der gewählten Welt (Persistenz).
+- Online:
+	- Liste gespeicherter Server-Verbindungen anzeigen.
+	- Server hinzufügen / bearbeiten / löschen.
+	- Server joinen.
+
+
+UI (Vorschlag)
+- Overlay-Panel (zentriert) mit:
+	- Titel
+	- Modus-Auswahl: Flat / VR
+	- Session-Auswahl: Local / Online
+	- Bereich Local:
+		- World-Liste (ItemList)
+		- Buttons: Neu / Löschen / Start
+	- Bereich Online:
+		- Server-Liste (ItemList)
+		- Buttons: Hinzufügen / Bearbeiten / Löschen / Join
+	- Status-Text (Fehler/Info)
+
+
+Daten / Persistenz
+World-Slots (Local)
+- Index-Datei (Metadaten): `user://worlds/index.json`
+	- Einträge: `id`, `name`, `created_at_unix`, `last_played_at_unix`
+- Save-Datei pro Welt: `user://worlds/<world_id>.json`
+	- Enthält die eigentlichen Save-Daten (galaxy_seed, player state, inventory, hotbar, …).
+- Optional: `user://settings.json`
+	- `last_world_id`, `last_mode`, `last_session_type`, `last_server_id`
+
+Server-Verbindungen (Online)
+- Datei: `user://servers.json`
+	- Liste von Bookmarks:
+		- `id`, `name`, `address`, `port`
+
+
+Integration in den Spielstart
+- Beim Start ist Gameplay-Input gesperrt (Mouse sichtbar).
+- Erst nach Klick auf „Start“/„Join“ wird das Gameplay freigegeben:
+	- Flat: Mouse captured (wenn kein UI-Fenster offen).
+	- VR: XR-Startup wird gestartet.
+- Local Start:
+	- Gewählte Welt wird als aktiver Save-Slot gesetzt.
+	- Save laden, wenn vorhanden; sonst normale Startlogik (Startsystem + Startinventar).
+- Online Join:
+	- Verbindung über `NetworkManager` (ENet) herstellen.
+	- Danach Gameplay freigeben (World-State-Sync kommt in späteren Schritten).
+
+
+Risiken / Stolpersteine
+- Save-Migration: bisheriger Single-Save (`user://savegame.json`) sollte optional in einen World-Slot überführt werden.
+- Multiplayer-MVP synchronisiert aktuell nur Player-Transforms (ohne World-State/Warp).
+	- Für echtes „Online Welt spielen“ ist später Schritt 3+ nötig (Warp/System + Inventar + Build Sync).
+
+
+Plan (inkrementell)
+1) SaveService auf World-Slots erweitern (Index + aktive Welt) – DONE
+2) StartMenu UI (Scene + Script) erstellen – DONE
+3) Main-Startup auf StartMenu umstellen (Gameplay erst nach Auswahl) – DONE
+4) Online-Server-Bookmarks speichern/anzeigen + Join über NetworkManager – DONE
+5) Polish: last selection speichern, bessere Fehlermeldungen, Buttons disable/enable – TODO

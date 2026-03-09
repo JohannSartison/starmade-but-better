@@ -1,0 +1,153 @@
+Prozedurale Galaxie-Karte (Galaxy Map) – Konzept & Plan
+
+Ziel
+- Eine prozedural (Seed-basiert) generierte Galaxie-Karte, die per Taste M als UI-Fenster geöffnet wird.
+- Der Spieler kann Sternsysteme finden/auswählen, Infos anzeigen und später als Ziel für Reisen verwenden.
+- Mehrere Zoom-Ebenen (LOD): Galaxie → Sternsystem → (optional) Planet/Orbit-Details.
+
+Steuerung (Desktop, Vorschlag)
+- M: Galaxy-Fenster öffnen/schließen.
+- Mausrad: Zoom auf den Punkt, auf den der Mauszeiger zeigt (Cursor-centric Zoom).
+- Mittlere Maustaste (halten) + Maus bewegen: Karte verschieben (Pan).
+	- Intuition: Maus nach links → Karte nach links (wie „Karte greifen“).
+- Linke Maustaste (halten) + Maus bewegen: Karte um den aktuellen Fokuspunkt drehen (Yaw, optional Pitch).
+	- Links bewegen → Uhrzeigersinn/gegen Uhrzeigersinn (Yaw).
+	- Hoch/Runter → Tilt/Pitch um den Fokus (Betrachtungswinkel / „schräger Blick“).
+- Rechtsklick: System auswählen (Highlight).
+- Doppelklick (Rechtsklick) auf ein System: Wechsel in den System-View.
+- Zoom-In (sehr nah, Schwelle): System-View für das System unter dem Cursor (ohne Auswahl/Highlight).
+- ESC: Fenster schließen (optional zusätzlich zu M).
+
+Ansichten / Zoom-Level (LOD)
+1) Galaxie-Übersicht (weit herausgezoomt)
+	- Nur Sterne/Sternsysteme als leuchtende Punkte, ggf. Clustering ab sehr großem Zoom.
+	- Optional: Spiralarme/Core als dezentes Grid/Background.
+2) Sternsystem-Ebene (nah genug / ab Zoom-Schwelle)
+	- Ein ausgewähltes Sternsystem zeigt eine leuchtende Sonne im Zentrum.
+	- Umlaufbahnen als dünne Linien; Planeten sitzen auf ihren Orbits (2D/3D Darstellung je nach Umsetzung).
+	- Optional: Name, Distanz, Gefahrenlevel, Ressourcen, Fraktionen, „Entdeckt“-Status.
+3) Planet/Orbit-Details (optional)
+	- Planet-Infos, Monde, Stationen, Asteroidengürtel, POIs.
+
+Spieler-Markierung
+- Eigene Position als pulsierender Punkt, quadratisch umrandet (rot).
+- Auswahl (Rechtsklick) als gleiche Markierung (grün), ebenfalls pulsierend.
+- Optional: Pfeil für Blickrichtung/Bewegungsrichtung.
+- Optional: Linie zum ausgewählten System + Distanzanzeige.
+
+Datenmodell (Deterministisch, Seed-basiert)
+- galaxy_seed: int
+- Systeme: id, name, position (Vector3), star_color, star_radius/type, discovered/visited, system_seed
+- Planeten: orbit_radius, orbit_speed, size, color/type, planet_seed, (optional) Ressourcen/POIs
+- Skalierung/Einheiten: Muss zur Ingame-Welt passen (Sonne/Planeten-Größen siehe X_Spielidee.txt).
+
+Prozedurale Generierung (Richtlinie)
+- Spiralarm-Galaxie (arm_count, spiral_tightness, arm_spread, core_radius, outer_radius, vertical_spread).
+	- `spiral_tightness`: wie stark sich die Arme „einrollen“ (kleiner = weniger Spiral-Krümmung, größer = stärker gewunden).
+- Verteilung: radialer Falloff (mehr Systeme in/nahe Armen, weniger im Halo), leichte Höhe (Y) für 3D Tiefe.
+- Black-Hole-Deadzone (lebensfeindliche Zone um das Zentrum):
+	- `GalaxyService.black_hole_system_free_radius`: absolut systemfreier Radius um (0,0,0) (normiert, 0..1).
+	- `GalaxyService.black_hole_density_falloff_width`: Übergangsbreite nach außen (Dichte steigt von 0 → 1). `0` = harter Rand.
+	- Tipp: Für einen reinen Verlauf ab dem Zentrum `black_hole_system_free_radius = 0` setzen und nur die Falloff-Breite nutzen.
+- Arm-Kontrast (für deutlich sichtbare Spiralarme):
+	- `interarm_fraction`: Anteil der Systeme zwischen den Armen (kleiner = leerere Zwischenräume).
+	- `arm_width_multiplier`: macht Arme schmaler/breiter (kleiner = stärker gebündelt).
+	- `interarm_width_multiplier`: Streuung der wenigen Systeme zwischen den Armen (größer = diffuser Hintergrund).
+- Wiederholbarkeit: Gleicher galaxy_seed → identische Systeme/Planeten.
+- Optional: „Entdeckungs“-Mechanik: nicht entdeckte Systeme nur als schwache Punkte oder gar nicht sichtbar.
+
+Rendering / Performance (Richtlinie)
+- Viele Sterne: Instancing (MultiMesh) oder Canvas-Caching (nicht jedes Frame alles neu zeichnen).
+- Redraw nur bei Pan/Zoom/Rotation oder Datenänderung.
+- LOD: ab großem Zoom nur Cluster/Heatmap; ab näherem Zoom einzelne Systeme + Labels.
+
+Integration ins Gameplay (Zielbild)
+- Galaxy Map ist UI; reale Sternsysteme werden in der Welt gestreamt/instanziiert, wenn der Spieler hinfliegt/warpt.
+- Auswahl eines Systems setzt ein Navigationsziel (Waypoint).
+- Reise/Übergang: z.B. Warp/Autopilot → beim Ankommen wird System-Inhalt (Sonne, Planeten, Asteroiden) geladen.
+
+Aktueller Stand (im Projekt)
+- Ein Galaxy-Fenster existiert bereits: Öffnen/Schließen mit M, prozedurale Galaxie als echter 3D-Viewport (MVP).
+	- UI: Galaxy-Fenster nimmt den kompletten Bildschirm ein (Fullscreen-Overlay).
+		- Ohne zentriertes Panel/„Fenster“-Rahmen und ohne große Außenränder.
+	- Rendering läuft in einem eigenen `World3D` (SubViewport `own_world_3d`), damit Galaxy-Objekte nicht in der normalen Spielansicht „durchlecken“, wenn das Fenster geschlossen ist.
+- Galaxie-Rendering ist jetzt 3D:
+	- Sternsysteme werden als MultiMesh (Chunk-basiert) gerendert.
+	- Im Zentrum ist ein „Black Hole“-Marker (visuell) platziert; um das Zentrum gibt es eine systemfreie Deadzone (Kontrast/Storytelling).
+	- Default: 5 Spiralarme (arm_count=5), Arm-Kontrast über `interarm_fraction`/`arm_width_multiplier`/`interarm_width_multiplier` + leichter 3D-„Thickness“ (vertical_spread).
+	- Aktuelles Preset (als Default im Code):
+		- system_count=3500
+		- arm_count=5
+		- spiral_tightness=0.5
+		- arm_spread=0.28
+		- interarm_fraction=0.33
+		- arm_width_multiplier=0.45
+		- interarm_width_multiplier=1.9
+		- radial_power=0.85
+		- core_fraction=0.18
+		- core_radius=0.22
+		- vertical_spread=0.04
+		- black_hole_system_free_radius=0.10
+		- black_hole_density_falloff_width=0.12
+- Controls sind umgesetzt (3D-Orbit-Kamera):
+	- Mausrad: Zoom (dolly) mit Cursor-Fokus auf die Galaxie-Ebene (y=0).
+	- MMB halten: Pan/Shift des Fokus (Grab-Style).
+	- LMB halten: Rotation (Yaw + Pitch) um den aktuellen Fokuspunkt.
+- ESC schließt das Galaxy-Fenster (wenn offen).
+- Zentrale Datenbasis existiert: `GalaxyService` generiert deterministisch Systeme (GalaxyData) und on-demand Systemdetails (Stern + Planeten/Orbits) aus `system_seed`.
+- Spieler-Markierung in der Galaxy-Ansicht ist implementiert (3D-Marker im Viewport).
+- System-Auswahl ist implementiert (Rechtsklick) inkl. Info-Panel (Sternklasse/Planeten/Distanz).
+- System-View (Sonne/Orbits/Planeten) ist jetzt als echter 3D-View implementiert (Transition 3D→3D in `GalaxyView3D`).
+	- Einstieg:
+		- Doppelklick Rechts auf ein System **oder**
+		- Reinzoomen bis zur Distanz-Schwelle (`GalaxyView3D.system_view_enter_distance_threshold`) **während die Maus über einem System ist**.
+		- Hinweis: Kleinere Schwelle = späterer Wechsel (weil es eine Kamera-Distanz ist). Wenn die Schwelle kleiner als `GalaxyView3D.camera_distance_limits.x` ist, kann sie nicht erreicht werden → Min-Distanz ggf. reduzieren.
+	- Verlassen:
+		- „< Zurück“-Button **oder** Rechtsklick im System-View **oder** Herauszoomen bis zur Exit-Schwelle (`GalaxyView3D.system_view_exit_distance_threshold`).
+	- Tuning:
+		- Größe: `GalaxyView3D.system_view_world_radius`
+		- Orbit-Speed: `GalaxyView3D.system_view_orbit_time_scale`
+		- Planet-Size: `GalaxyView3D.system_view_planet_size_multiplier`
+- Navigationsziel/Waypoint ist implementiert: Aus der Auswahl kann ein Ziel gesetzt/gelöscht werden; Ziel wird auf der Karte hervorgehoben (Marker) und im HUD angezeigt.
+- Warp (MVP) ist implementiert: Per „Warp“-Button wird der Spieler zur Ziel-Systemposition teleportiert (Map→World via `player_world_to_map_scale`) und die Galaxy-UI schließt.
+	- Hinweis: UI-Button-Klicks werden als „handled“ markiert, damit sie nicht als Gameplay-Input (z.B. Mining/Placement) durchrutschen.
+	- Fix: `VoxelChunk` unterstützt `auto_generate`, damit temporäre Chunks im Gameplay sauber konfiguriert werden können (kein Crash durch fehlende Property).
+- Als nächste Schritte sind Feintuning (Kamera-Feeling/Highlights, LOD-Stufen/Exit-on-Zoom-Out) und Persistenz/Discovery offen.
+- System-Objekte-HUD nutzt jetzt die Galaxy-Chunk-Größe als Grid:
+	- Im aktuellen System bleiben alle Objekte gelistet.
+	- Außerhalb werden nur Objekte aus den 26 direkt angrenzenden Grid-Zellen (3x3x3) berücksichtigt (Richtungsanzeige).
+	- Systeme selbst erscheinen nicht mehr in der Liste.
+- Leere Nachbarzellen können Asteroidenfelder enthalten:
+	- Auftreten per Chance (`asteroid_field_empty_cell_chance`) und deterministisch per Galaxy-Seed.
+	- Dichte/Größe variieren innerhalb definierter Multiplikatoren (`asteroid_field_empty_cell_density_mult`, `asteroid_field_empty_cell_scale_mult`).
+	- Leere Zellen ohne Feld bleiben leer.
+
+Plan (Stück für Stück)
+1) Input/Controls finalisieren
+	- Middle-Mouse-Pan + Left-Mouse-Rotation (Fokuspunkt), Cursor-centric Zoom, ESC schließt.
+	- Done wenn: Bedienung fühlt sich natürlich an, Zoom bleibt stabil, kein „Verlieren“ der Galaxie.
+2) Datenmodell & Service-Schicht
+	- GalaxyData (Seed, Systeme) + zentrale Stelle zum Zugriff (Autoload/Manager).
+	- Systemdetails (Stern + Planeten/Orbits) on-demand aus `system_seed` (z.B. `get_system_details(system_id)`), inkl. Cache.
+	- Done wenn: Galaxie kann deterministisch generiert und erneut geladen werden (gleicher Seed = gleiche Daten) und Systemdetails sind reproduzierbar.
+3) Galaxy-Rendering (Übersicht) + Spieler-Markierung
+	- Effizientes Rendering für viele Systeme + pulsierender Player-Marker + einfache Grid/Background.
+	- Done wenn: Performance stabil bleibt und Player/Systems gut lesbar sind.
+4) Auswahl/Highlight + Info-Panel
+	- Rechtsklick selektiert System, zeigt Details (Name/Seed/Distanz), optional Suche/Filter.
+	- Done wenn: Auswahl eindeutig ist und UI die wichtigen Infos liefert.
+5) LOD/Transition: Galaxy → Sternsystem
+	- Ab Zoom-Schwelle oder per Doppelklick (Rechtsklick) in System-View wechseln; zurück per Back/Zoom-Out.
+	- Done wenn: Wechsel sauber/verständlich ist (gerne mit kurzer Animation).
+6) Sternsystem-View: Sonne + Orbits + Planeten
+		- Umlaufbahnen als Linien, Planeten als Punkte/Icons, optional Ressourcen/POIs.
+		- Planet-Orbit-Animation ist bewusst langsam skaliert (Tuning über `system_view_orbit_time_scale`).
+		- Done wenn: System-Layout nachvollziehbar ist und Planeten/Orbits stabil gerendert werden.
+7) Gameplay-Integration: Ziel setzen & Reisen
+	- Aus Systemauswahl wird ein Navigationsziel; optional Warp/Autopilot; System wird beim Ankommen geladen.
+	- Done wenn: Spieler zuverlässig in/zu einem System wechseln kann.
+8) Persistenz/Discovery
+	- Speichern: galaxy_seed, discovered/visited, ggf. gesetztes Ziel.
+	- Done wenn: Spielstand lädt exakt den Zustand der Galaxie/Entdeckung.
+9) Polish
+	- Labels, Tooltips, Farben, Sound/FX, Controller/VR-Optionen, Performance-Tuning.

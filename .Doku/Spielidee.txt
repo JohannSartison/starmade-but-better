@@ -1,0 +1,255 @@
+# VR MMO Space Voxel Shooter – Konzept & Architektur
+
+## Kurzbeschreibung
+Ein VR‑fokussiertes MMO‑Weltraum‑Voxel‑Spiel inspiriert von *Starmade* – mit Schwerpunkt auf besserer Performance und deutlich größeren baubaren Strukturen. Optional soll ein Flat‑Mode (non‑VR) verfügbar sein, jedoch mit reduzierten Freiheiten gegenüber VR.
+
+## Vision & Ziele
+- **Massive Bauwerke:** Sehr große Schiffe/Stationen durch effiziente Voxel‑Datenstrukturen, Streaming und LOD.
+- **VR‑Priorität:** Immersive Steuerung, Bedienung und Präsenz als Primärziel.
+- **Performance zuerst:** Stabiler Frame‑Budget‑Fokus, aggressive Reduktion von Draw‑Calls, intelligentes Chunking.
+- **MMO‑Grundlagen:** Persistente Welt, Bauen, Kampf, Wirtschaft, Exploration.
+
+## Core‑Gameplay‑Loop (hoch‑level)
+1. Ressourcen finden/abbauen
+2. Bauelemente herstellen
+3. Schiffe/Stationen bauen und erweitern
+4. Erkundung, Handel, Konflikte
+5. Fortschritt durch größere Konstruktionen und bessere Systeme
+
+## Technische Architektur (Entwurf)
+### Voxel‑Datenstruktur
+- **Chunk‑basiert:** Welt in feste Chunks 32³ unterteilt.
+- **Block‑Grundgröße:** 0,2 m (1 m / 5) Kantenlänge für feinere Details als in Starmade.
+- **Datenlayout:** Dicht gepackte IDs (Material, Meta), ggf. bit‑packed.
+- **LOD‑Kaskade:** Weiter entfernte Chunks mit vereinfachtem Mesh/Proxy.
+- **Streaming:** On‑Demand Laden/Entladen von Chunks basierend auf Sicht/Distanz.
+
+### Mesh‑Erzeugung
+- **Greedy Meshing** oder **Mesh‑Merging**, um Flächen zusammenzufassen.
+- **Background‑Threads** für Mesh‑Build; Main‑Thread nur zum Zuweisen.
+- **GPU‑freundlich:** Material‑Batching, reduzierte Submeshes.
+
+### Physik & Kollision
+- **Separate Kollisions‑LOD:** Grobe Kollisionen, Detail nur nahe.
+- **Schiffskörper:** Zusammengefasste Collider pro Chunk/Segment.
+
+### Rendering‑Pipeline (Godot 4.6)
+- **Occlusion & Culling** konsequent nutzen.
+- **Draw‑Call‑Budget** als harte Leitlinie.
+- **Licht/Reflexionen** sparsam, besonders in VR.
+
+## VR & Flat‑Mode
+### VR
+- Komfort‑Optionen: Teleport/Glide, Snap‑Turn, Vignetting.
+- Interaktion: Greif‑/Ray‑Interaktion für UI/Blocks.
+- UI: Welt‑UI, große Lesbarkeit, klare Tiefenstaffelung.
+- **VR‑Bewegung (Test‑World):** Smooth‑Locomotion ohne Teleport. Linker Stick = vor/zurück/links/rechts.
+- **VR‑Vertikal (Test‑World):** L3‑Click = hoch, L3‑Click + Grip = runter.
+- **VR‑Rotation (Test‑World):** Rechter Stick = Yaw/Pitch; Grip + rechter Stick links/rechts = Roll (3‑Achs‑Rotation).
+- **Hotbar (VR):** 10 Slots an der Innenseite des Unterarms; Auswahl per physischem Antippen/Drücken der Slots.
+- **Inventar (VR):** Zusätzliche „I“-Taste am Ende der Hotbar; beim Drücken fährt das Inventar nach oben aus der Hotbar heraus und fährt beim erneuten Drücken wieder ein.
+- **Inventar‑Bedienung (VR):** Items greifbar und per Ziehen in Slots platzierbar (Drag&Drop‑Analog).
+- **Drag&Drop (VR):** Greifen/ziehen über linken Trigger.
+- **Stack‑Split (VR):** Linker Trigger + Griptaste → auf freien Slot loslassen → Eingabefenster (Anzahl + OK). OK setzt die Anzahl; Klick außerhalb schließt ohne Aktion.
+- **Stack‑Split (VR, Abbruch):** Wenn der Ziel‑Slot nicht frei ist, wird der Split abgebrochen.
+- **Stack‑Merge (VR):** Gleiche Blöcke aufeinander ziehen und loslassen.
+- **Eingabefenster (VR):** Bestätigung per physischem Button‑Druck im Fenster.
+- **Eingabefenster‑Platzierung (VR):** Erscheint direkt am Ziel‑Slot.
+- **Interaktions‑Feedback (VR):** Haptik, kurzer Klick‑Sound und visuelles Highlight bei Hover/Select.
+
+### Flat‑Mode
+- Maus/Keyboard oder Gamepad.
+- Vereinfachte Bau‑/Manipulations‑Funktionen (optional).
+- **Hotbar/Inventar (Flat‑Mode):** Klassisch am unteren Bildrand, analog zu Starmade/Minecraft.
+- **Inventar (Flat‑Mode):** Wie in VR ausfahrbar aus der Hotbar; Toggle per Taste „i“.
+- **Eingaben (Flat‑Mode):** Hotbar‑Slots über Tasten 1–0; Inventar öffnen/schließen mit Taste „i“.
+- **Einstellung Hotbar‑Modus:** Umschaltbar zwischen Flat‑ und VR‑Variante (Standard: Flat). VR‑Modus nutzt vorerst das Flat‑Overlay, bis die Arm‑Hotbar umgesetzt ist.
+- **Einstellung Hotbar‑Arm:** Bei VR‑Modus wählbar (Links/Rechts).
+- **Start‑Modus:** Einstellbar auf Auto/Flat/VR (Standard: Auto). VR‑Modus erzwingt VR‑Start auch ohne erkannte Brille.
+- **Hotbar‑Auswahl (Flat‑Mode):** Zusätzlich per LMT‑Klick direkt auf den gewünschten Slot.
+- **Inventar‑Bedienung (Flat‑Mode):** Drag&Drop mit LMT zwischen Slots/Inventar.
+- **Stack‑Split (Flat‑Mode):** LMT+Shift auf Stack → auf freien Slot loslassen → Eingabefenster über der Stelle (Anzahl + OK). OK setzt die Anzahl in den Ziel‑Slot; Klick außerhalb schließt ohne Aktion.
+- **Stack‑Split (Abbruch):** Wenn der Ziel‑Slot nicht frei ist, wird der Split abgebrochen.
+- **Stack‑Merge (Flat‑Mode):** Gleiche Blöcke aufeinander ziehen und loslassen.
+- **Stack‑Merge‑Button:** Inventar besitzt einen Button, der gleiche Stacks in Inventar und Hotbar zusammenführt.
+- **Hotbar/Inventar‑Kopplung:** Kopplung erfolgt über den Stack (nicht über Slots); Änderungen spiegeln sich im jeweils verbundenen Stack.
+
+## Multiplayer‑Grundlagen
+- **Server‑Autorität** für Welt‑State und Bauen.
+- **Replikation** chunk‑basiert (Interest Management).
+- **Delta‑Updates** für Voxel‑Änderungen.
+- **Persistenz:** Weltzustand serverseitig speichern (Chunks + Blueprints).
+
+## Startmenü & Server‑Browser
+- **Startmenü beim Spielstart:** Auswahl zwischen Local und Online.
+- **Local‑Modus:** Startet direkt in eine lokale Spielumgebung.
+- **Online‑Modus:** Server‑Browser mit Server‑Liste.
+- **Server‑Liste:** Server hinzufügen/merken und direkt aus der Liste verbinden/starten.
+- **Server‑Eintrag Felder:** Name, IP/Port, Ping, Spielerzahl, Status.
+- **Server‑Aktionen:** Favorit markieren, Umbenennen, Entfernen.
+- **Online‑Ablauf:** Serverliste aktualisieren → Status/Ping anzeigen → „Verbinden“ starten.
+- **Online‑Fehlerfälle:** Timeout, falsches Passwort, Server voll, Server nicht erreichbar.
+- **Passwort‑Flow (Online):** Bei geschützten Servern Passwort‑Dialog (Feld + OK) mit optional „Merken“.
+- **Local‑Optionen:** Weltname, Seed, Weltgröße (klein/mittel/groß).
+
+## Weltstruktur: Galaxy
+- **Weltformat:** Galaxy als 3D‑Raum mit frei navigierbarer 3D‑Karte.
+- **Zentrum:** Schwarze Kugel als Schwarzes Loch.
+- **Navigation:** Rein/Raus‑Zoomen in Sonnensysteme, freie Bewegung auf allen Ebenen.
+- **Sonnensysteme:** Sonne im Zentrum, dargestellt als strukturierte Kugel mit Corona.
+- **Planeten:** Kleinere Kugeln, die in Orbitalen um die Sonne rotieren.
+- **Maßstab:** Basisgröße 1 m; 1 Block = 0,2 m als Grundeinheit.
+- **Scaled‑Space (Galaxy/System‑Karte):** 1 Unit = 1000 km für große Distanzen.
+- **Referenzwerte:** Sonnendurchmesser ≈ 1.392.000 km → 1392 Units; 1 AU ≈ 149.600.000 km → 149.600 Units.
+- **Darstellung:** Emissive Sonne + Corona; Beleuchtung im Scaled‑Space per DirectionalLight (keine OmniLight‑Mega‑Range).
+- **Abstände/Größen:** Vorläufig offen, werden später festgelegt.
+
+### Scaled‑Space / Multi‑Scale
+- **Ebenen:** Scaled‑Space (1 Unit = 1000 km) für Galaxy/System‑Darstellung, Local‑Space (1 Unit = 1 m / 1 Block = 0,2 m) für Gameplay‑Details.
+- **Übergänge:** Wechsel zwischen Ebenen per Scene‑Swap/Streaming mit LOD‑Blends (keine echten „Zooms“ in derselben Skala).
+- **Floating Origin:** Spieler bleibt nahe (0,0,0); große Distanzen über Sektor‑Koordinaten.
+- **Darstellung:** Scaled‑Space zeigt Proxies (Sterne/Planetenpunkte), Local‑Space zeigt volle Details/Voxel.
+- **Beleuchtung:** Scaled‑Space DirectionalLight, lokale OmniLights nur in der Detail‑Ebene.
+- **Precision/Clipping:** Far‑Clip und Physik nur in Local‑Space detailliert; Scaled‑Space minimal gehalten.
+- **Voxel‑Scope:** Chunks/Voxel primär für Stationen/Raumschiffe; restlicher Raum als Scaled‑Space‑Proxies.
+- **Vorteile:** Weniger Speicher/Traffic, klare LOD‑Trennung, stabile Physik nur im Local‑Space.
+- **Risiken:** Übergänge/Andocken müssen sauber zwischen Scaled‑Space und Local‑Space wechseln.
+- **Multiplayer‑Hinweis:** Server repliziert Voxel‑Strukturen (Schiffe/Stationen); Scaled‑Space sendet nur Proxy‑Daten.
+- **Sektor‑Koordinaten (Beispiel):** `Sector = (gx, gy, gz)` für Galaxy‑Chunks + `LocalPos = (x, y, z)` im Sektor; Weltposition = `Sector * SectorSize + LocalPos`.
+- **Sektor‑Größe (Beispiel):** `SectorSize = 10.000 km` (10 Units) im Scaled‑Space, Local‑Space separat.
+- **Transition‑Pipeline (Kurzform):** Galaxy‑Karte → Auswahl System → System‑Scene (Scaled‑Space) → Anflug/LOD‑Blend → Local‑Scene (1 m/0,2 m) → Floating Origin aktiv.
+- **Koordinaten‑Skizze (Text):** `WorldPos = (gx*SectorSize + x, gy*SectorSize + y, gz*SectorSize + z)` → kleine lokale Werte, große Werte nur im Sektor.
+- **LOD‑Schwellen (Beispiel):** Galaxy‑Punkt sichtbar ab sehr großem Zoom; System‑Sonne/Orbits bei mittlerem Zoom; Local‑Scene ab Nah‑Zoom/Anflug (z. B. < 5 Units zum System‑Proxy).
+- **Zoom‑Stufen (Beispiel):** Z0 (Galaxy‑Punkte), Z1 (System‑Sonne), Z2 (Orbits/Planetenbahnen), Z3 (Local‑Scene/Detail). Schwellen z. B. bei 1000 / 100 / 5 Units Distanz zum System‑Proxy.
+- **Sektor/Chunk‑Grid (Beispiel):** `SectorSize = 10.000 km` (10 Units), `GalaxyGrid = 128×128×16` Sektoren (anpassbar).
+- **Konfigurierbare Schwellen (Beispiel):** `ZoomZ1=1000`, `ZoomZ2=100`, `ZoomZ3=5` (Units) als Settings/Config speicherbar.
+- **System‑Proxy (Beispiel):** `{ id, name, sector_coord, local_pos, sun_radius, planet_count, has_asteroid_ring, status }` für Scaled‑Space‑Darstellung.
+- **System‑Proxy (JSON‑Beispiel):** `{"id":"SYS-42","name":"Helios‑42","sector_coord":[12,5,0],"local_pos":[3.2,7.8,1.1],"sun_radius":696,"planet_count":9,"has_asteroid_ring":true,"status":"online"}`.
+- **Seed → Proxy (Kurz‑Flow):** `GalaxySeed` → Sektor‑Grid erzeugen → Dichte/Spiralarme anwenden → System‑IDs + Positionen erzeugen → Proxy‑Daten ableiten → in Karte anzeigen.
+- **Galaxy‑Seed‑Parameter (Beispiel):** `arm_count=5`, `arm_spread=0.35`, `core_empty_radius=2.0`, `system_density=0.6`, `density_falloff=0.8`, `jitter=0.15`.
+- **Parameter‑Bedeutung (kurz):**
+  - `arm_count`: Anzahl Spiral‑Arme.
+  - `arm_spread`: Breite/Verteilung der Arme.
+  - `core_empty_radius`: Radius der kernnahen „leeren“ Zone.
+  - `system_density`: Grunddichte der Systeme.
+  - `density_falloff`: Dichteabnahme zu den äußeren Bereichen.
+  - `jitter`: Zufällige Streuung (Unregelmäßigkeit).
+- **Presets (Tabelle):**
+  | Preset | arm_count | arm_spread | core_empty_radius | system_density | density_falloff | jitter | Zweck |
+  |---|---:|---:|---:|---:|---:|---:|---|
+  | Ruhig | 3 | 0.25 | 3.0 | 0.4 | 0.9 | 0.1 | Viel Freiraum, wenige Systeme |
+  | Mid | 5 | 0.35 | 2.5 | 0.6 | 0.8 | 0.15 | Ausgewogen, Standard‑Preset |
+  | Dicht | 7 | 0.45 | 1.5 | 0.8 | 0.6 | 0.2 | Viele Systeme, kurze Wege |
+- **Proxy‑Status‑Felder (optional):** `ping`, `player_count`, `capacity` für Online‑Anzeige.
+
+### Galaxy‑Karte (Navigation/LOD)
+- **Standard‑Ansicht:** Isometrischer Winkel beim Öffnen der Karte.
+- **Karten‑Navigation (VR):** Linke Griptaste hält die Karte fest; Controller‑Bewegung verschiebt die Karte im Raum.
+- **Karten‑Fokus (VR):** Linker Joystick links/rechts dreht um den Fokuspunkt.
+- **Zoom (VR):** Linker Joystick vor/zurück zoomt rein/raus zum Fokuspunkt.
+- **Karten‑System:** Chunk‑basiert; der fokussierte Raum‑Chunk wird durch ein Kantengitter hervorgehoben.
+- **Prozedurale Galaxy:** Mehrere tausend Sonnensysteme.
+- **Verteilung:** Spiralförmig um den Kern angeordnet.
+- **Dichte‑Regel:** Keine Systeme in direkter Kernnähe; vereinzelt in etwas Distanz, dann zunehmende Dichte in den Spiralarmen.
+- **System‑Darstellung:** Sonnensysteme als leuchtende Punkte in der Galaxy.
+- **LOD‑Verhalten:** Beim Reinzoomen erscheinen ab einem Zoom‑Level Sonne + Planetenbahnen; beim Herauszoomen werden Planeten/Details ausgeblendet, bis nur noch ein leuchtender Punkt bleibt.
+- **LOD‑Schwelle:** Umschalten auf grobe Details, sobald der Raum‑Chunk groß genug dargestellt wird.
+- **Karten‑Navigation (Flat‑Mode):** LMT halten + Maus bewegen verschiebt die Karte; Mausrad zoomt rein/raus.
+- **Objekt‑Fokus:** Bei ausreichendem Zoom/LOD können System‑Objekte im Raum‑Chunk angeklickt werden; Fokuswechsel läuft weich/gleitend, ohne abruptes Springen.
+- **System‑Skalierung (Gameplay‑Scale):** 1 Sonne (strukturierte Kugel + zentrale Lichtquelle, optional Corona), 5–13 Planeten (einfache strukturierte Kugeln) und am äußersten Rand ein Asteroiden‑Ring/-Scheibe mit unterschiedlichen Größen/Formen.
+- **Fokus‑Übergang (Performance):** Weiche Interpolation (Lerp/SmoothStep) mit variabler kurzer Dauer (z. B. 0,3–0,5 s); keine harten Sprünge.
+- **Asteroiden‑Ring (Performance‑LOD):** LOD‑Schwellen an Zoom‑Stufen gekoppelt; nah als instanzierte Asteroiden (GPU‑Instancing), mittlere Distanz vereinfacht, fern als dünnes Ring‑Band/Partikel‑Band.
+
+## Performance‑Leitlinien
+- **Ziel‑FPS:** VR = konstant hoch (Budget pro Frame strikt).
+- **Profiling‑Pflicht:** Jede große Funktion mit Profiling‑Messung.
+- **Parallelisierung:** Mesh‑Build, IO‑Streaming, Netzwerk getrennt.
+- **LOD‑Disziplin:** Sichtdistanz und Detail dynamisch anpassen.
+
+## Daten & Inhalte
+- **Blueprints** für wiederverwendbare Strukturen.
+- **Material‑Set** begrenzt halten, um Batching zu verbessern.
+- **Modulares Systemdesign** (Energie, Antrieb, Waffen) als Block‑Meta.
+- **Blockformen (wie in Starmade):** Cube, Wedge, Corner, Tetra, Hepta.
+- **Inventar/Hotbar‑Darstellung:** Isometrischer Winkel, flache Seite zeigt nach hinten; Stapelanzahl direkt am Namen angezeigt.
+- **Block‑Icons:** Jede Blockform besitzt ein eigenes Icon für klare Erkennung.
+- **Icon‑Darstellung:** Isometrisch (30°) als 2D‑Icon oder 3D‑Miniatur schwebend über dem Slot.
+- **Icon‑Einstellungen:** Standard ist 2D‑Icon; in den Einstellungen zwischen 2D‑Icon und 3D‑Miniatur umschaltbar (Performance/Präferenz).
+- **Slot‑Größe:** 30×30 px; **Icon‑Größe:** max. 25×25 px.
+- **Hintergrundfarbe (Slots):** Dunkles Grau.
+- **UI‑Labels:** Eingabefenster verwendet „Anzahl“ und „OK“; Merge‑Button trägt das Label „Merge“.
+
+## Roadmap (konkretisiert)
+### Milestone 1: Voxel‑MVP
+**Ziele:** Grundlegende Voxel‑Datenhaltung, Mesh‑Build und Persistenz.
+**Akzeptanzkriterien:**
+- Chunks werden geladen/entladen und sind im Editor sichtbar.
+- Greedy‑Mesh erzeugt korrektes, geschlossenes Mesh ohne Löcher.
+- Voxel‑Speicher/Load funktioniert für mindestens 3 gespeicherte Test‑Chunks.
+- Einfache Performance‑Messung (FPS/Frame‑Zeit) ist dokumentiert.
+**Konkrete Godot‑Tasks (Milestone 1):**
+- Szene `scenes/voxel/VoxelWorld.tscn`: Root‑Node für die Voxel‑Welt.
+- Script `scripts/voxel/VoxelWorld.gd`: Chunk‑Grid, Sichtdistanz, Load/Unload‑Logik.
+- Script `scripts/voxel/VoxelChunk.gd`: Voxel‑Datenarray, Dirty‑Flags, Bounds.
+- Script `scripts/voxel/VoxelMesher.gd`: Greedy‑Meshing aus Chunk‑Daten.
+- Script `scripts/voxel/VoxelStorage.gd`: Save/Load der Chunk‑Daten (lokal).
+- Szene `scenes/voxel/TestScene.tscn`: Testaufbau mit Kamera und Debug‑Spawn.
+- Script `scripts/debug/PerfOverlay.gd`: FPS/Frame‑Zeit im Editor anzeigen.
+- Manuelle Tests: 3 Chunks speichern/laden, Mesh visuell prüfen.
+
+### Milestone 2: VR‑MVP
+**Ziele:** VR‑Bewegung, Grundinteraktion und Bau/Abbau.
+**Akzeptanzkriterien:**
+- VR‑Movement (Teleport oder Smooth) inklusive Snap‑Turn.
+- Platzieren/Entfernen von Voxeln mit Controller‑Interaktion.
+- UI‑Element (z. B. Materialauswahl) ist in VR bedienbar.
+- Stabiler Testlauf in VR ohne kritische Framedrops in kleiner Testszene.
+**Konkrete Godot‑Tasks (UI/Inventar):**
+- VR‑Hotbar‑Interaktion: Slots antippen/drücken, visuelles Highlight.
+- VR‑Inventar‑Toggle: „I“-Taste ausfahrend/einfahrend.
+- Inventar‑Drag&Drop: Items greifen und in Slots ziehen.
+- UI‑Feedback: Haptik/Audio/Highlight bei Hover/Select.
+- Einstellungs‑Option: 2D‑Icon vs. 3D‑Miniatur.
+**Konkrete Godot‑Tasks (Startmenü):**
+- Startmenü‑Szene mit Local/Online‑Auswahl.
+- Server‑Browser‑UI (Liste, Felder, Aktionen).
+- Online‑Connect‑Flow mit Fehleranzeigen.
+- Local‑Welt‑Optionen (Name/Seed/Größe).
+
+### Milestone 3: Schiff‑Proto
+**Ziele:** Bewegliche Konstruktionen mit Basissystemen.
+**Akzeptanzkriterien:**
+- Schiffskern + einfache Energie/Antrieb‑Blöcke.
+- Bewegung reagiert auf Input und ist steuerbar.
+- Kollisionen funktionieren für bewegte Konstruktionen.
+- Kleine Teststruktur kann gebaut und bewegt werden.
+
+### Milestone 4: Netzwerk‑Proto
+**Ziele:** Autorität und Basis‑Replikation.
+**Akzeptanzkriterien:**
+- Server‑Autorität: Bauen/Ändern wird serverseitig bestätigt.
+- Zwei Clients sehen denselben Chunk‑Zustand.
+- Delta‑Updates für Block‑Änderungen funktionieren.
+- Minimaler Join/Leave‑Flow ohne Crash.
+
+### Milestone 5: Skalierung
+**Ziele:** Streaming, LOD und Performance‑Budget.
+**Akzeptanzkriterien:**
+- Dynamisches Chunk‑Streaming anhand Sichtdistanz.
+- Mindestens 2 LOD‑Stufen sichtbar.
+- Profiling‑Baseline mit Messwerten dokumentiert.
+- Sichtweite kann erhöht werden, ohne harte Framedrops in Tests.
+
+## Offene Entscheidungen
+- Konkrete Chunk‑Größe/LOD‑Stufen
+- Persistenzformat (Binary vs. JSON + Kompression)
+- Netzwerk‑Tick‑Rate und Snapshot‑Strategie
+
+## Risiken
+- **VR‑Performance** bei sehr großen Strukturen
+- **Netzwerk‑Last** bei massivem Bauen/Ändern
+- **Content‑Pipeline** für große Mengen an Voxel‑Materialien
+
+## Dokumentation & Fortschritt
+- Fortschritte und Entscheidungen werden im Ordner `.Doku` gepflegt.
+- Jede größere Architektur‑Änderung bekommt eine kurze Notiz.

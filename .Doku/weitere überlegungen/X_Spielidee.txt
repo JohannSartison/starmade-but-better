@@ -1,0 +1,46 @@
+Voxel Space Shooter angelehnt an Starmade
+
+- Lassen sich einige Funktionen auch mit Addons umsetzen?
+
+- w=forwert, s=rückwert, a=links, d=richts Bewegung ermöglichen. q=links e= rechts rotation. Leertaste= hoch und Schift + Leertaste = runter im Weltraum Bewegung ermöglichen.
+- Spiel Character ist ein Roboter in Humanoider Gestalt
+- Multiplayer
+- primär VR support, aber auch Flat möglich
+- Asteroiden Abbauen
+- Crafting von unterschiedlichen Blöcken
+- zusammenfügen von Blöcken zu größeren Strukturen(Raumschiffen/Raumstationen)
+- Blöcke lassen sich beim Bauen verfomen
+- Blöcke verfomen sich bei Kolision
+
+Umsetzbare Etappen:
+- Basis-Flight-Controller: InputMap für WASD/QE/Space/Shift, 6DoF-Bewegung mit sanfter Beschleunigung und Dämpfung.
+- Spielfigur/Schiff: Platzhalter-Roboter + einfache Cockpit-/Third-Person-Kamera, später austauschbar.
+- Raumfeld: Asteroiden-Instanzen mit Ressourcenwerten und grundlegender Abbau-Interaktion (Raycast + Health pro Asteroid).
+- Inventar & Crafting: Minimales Item-System (Ressourcen-Stack, Rezepte), UI-Prototyp.
+- Bauen aus Blöcken: Grid-/Snap-Platzierung, Undo/Remove, Speichern/Laden einer Struktur.
+- Block-Verformung: Erst simple visuelle Deformation bei Kollision (z.B. Shader-basiert oder Mesh-Blend), später echte Mesh-Änderung.
+- Multiplayer: Autoritativer Host, Sync für Bewegung/Inventar/Bauaktionen, Interpolation bei Clients.
+- VR-Support: OpenXR/Godot XR Tools für Eingaben und Cockpit-Interaktion, Flat- und VR-Eingaben parallel halten.
+
+Optionale Addons/Libs:
+- Godot XR Tools (VR), Godot OpenXR.
+- Networking-Helper (z.B. Godot Steam/ENet-basiert, falls nötig).
+
+
+
+
+
+Vorgehen
+
+1. Weltraum-Basis herstellen: Globale Gravity auf 0 setzen, WorldEnvironment anpassen (schwarzer Space-Skybox, Sterne, keine atmosphärische Sonne). Das ist leicht machbar.
+2. Sonnensystem/Planet-Framework bauen: Szenen für Sonne/Planet auf Meshbasis (SphereMesh, CustomShader) plus einfache Orbit-/Positionierungslogik. Das lässt sich parallel zu den Voxel-Strukturen einbauen.
+3. Galaxie-Generator: Manager, der über Seeds Sternsysteme erzeugt und bei Bedarf instanziert. Dazu gehören Persistenz (welche Systeme sind entdeckt), Streaming (nur nahe Objekte laden) und evtl. Sektorkoordinaten. Das ist die größte Baustelle und aktuell völlig offen.
+4. Integration mit bestehendem Gameplay: Navigation, Spawnpunkte, Kollisionslogik müssen wissen, ob du dich in einem System oder im Deep Space befindest. Zudem müssen VoxelChunk/ShipStructure korrekt relativ zu Planeten/Sonnen platziert werden.
+
+
+Die Größe der Sonne soll bitte rund 32000 einheiten im durchmessen haben. Die Planeten sollen jedoch 5-10% der Größe der Sonne entsprehen. Der Durchmesser des Sonnensystems soll bitte 20* größer sein als die Sonne.
+
+
+
+Neue Zusammenfassung
+Die Idee und Aufbau des Spiel: Das Spiel Feld ist eine Große spiral förmige Galaxy mit vielen Punkten ( jeder Punkte repräsentiert ein Sonnensystem und in der Mitte ist ein ganz große schwarze Kugel, welche ein Schwarzes Lock im Zentrum der Galaxy repräsentiert ). Die Punkte lassen sich entweder anklicken oder mit dem Mausrad hinein reinzoomen.

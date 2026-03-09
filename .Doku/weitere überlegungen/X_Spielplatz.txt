@@ -1,0 +1,146 @@
+Der eigentliche Spielplatz für die Spieler
+
+Zielbild (Gameplay)
+- Der Spieler bewegt sich „im echten 3D-Weltraum“ (Voxel/Schiffe/Asteroiden), aber astronomische Distanzen werden technisch clever gelöst:
+	- Nahe Objekte: echte 3D-Instanzen mit Physics/Collision.
+	- Weite Objekte: LOD/Impostor/Projection (glaubwürdig sichtbar, ohne extreme Weltkoordinaten).
+- Das System muss performant sein (Streaming/LOD), darf keine Pop-ins „in der Nähe“ haben und soll die Größenverhältnisse (Sonne/Planeten) glaubwürdig wirken lassen.
+
+Ist-Zustand (Projekt)
+- Galaxykarte: Systeme werden als Punkte per MultiMesh gerendert (Chunk-basiert, performant); kurzer Linksklick zoomt direkt in die System-View (Drag = Kamera-Rotation), Rechtsklick beendet die System-View.
+- System-View in der Galaxykarte ist aktuell ein 3D-MVP (Sonne/Orbits/Planeten als „Preview“).
+- System-View: Linksklick markiert Fokus (Stern/Planet/Position) mit Marker; „Ziel setzen“ nutzt den Fokus für Warp innerhalb des Systems.
+- Gameplay-Welt (Main Scene) ist separat und kann per Warp zur Ziel-Position springen.
+- Fenster/Resolution: Game-Fenster ist resizable und startet maximiert; Inhalte/UI passen sich an die aktuelle Fenstergröße an (nicht mehr fest auf 1152x648 begrenzt).
+- Gameplay-MVP: Startsystem ist konfigurierbar (Random / Specific ID / Auswahl in Galaxykarte per Warp).
+- Gameplay-MVP: Start platziert den Spieler in einem System und zeigt Stern/Planeten als Sky-Sphere-Marker.
+- Gameplay-MVP: SystemWorld instanziiert im Gameplay eine echte Sonne + Planeten (simple Meshes) im `MidRoot` (Planeten orbitieren).
+- Gameplay-MVP: Sky-Starfield („andere Systeme als Sterne“) als MultiMesh auf der Sky-Sphere + Zielsystem-Marker (grün, pulsierend).
+	- Hinweis: Starfield nutzt volle 3D-Galaxy-Positionen (inkl. Y); optional kann `sky_starfield_vertical_scale` die Vertikalität visuell verstärken.
+	- Gameplay-MVP: Asteroiden-Feld als einfache Meshes (MultiMesh) wird zellenbasiert um den Spieler gestreamt (MidRoot, Budget + Update-Intervall).
+		- Gameplay-MVP: Voxel-Building (Start): Ghost-Preview beim Anvisieren (erscheint zuverlässig von allen Blickwinkeln, wenn eine Fläche sichtbar/treffbar ist); Linke Maustaste halten → Fläche/Startpunkt wird gelockt & Position auf 0.2-Raster gesnappt; während gehalten: Block wird um den gelockten Ankerpunkt auf der Fläche in 2 Achsen extrudiert (nicht gespiegelt, nur in Zugrichtung) und per Mausrad in der dritten Achse (Tiefe/Normal) extrudiert; WASD rotiert den Platzierungsblock in 90°-Schritten während LMT gehalten wird → Loslassen platziert; außerhalb der Platzierung skaliert das Mausrad den Block in 0.2-Schritten (auch ohne gedrückte Maustaste, inkl. Thruster); Core wird aktuell per Doppelklick im Inventar gespawnt (mehrfach möglich → mehrere Strukturen; Doppelklick übernimmt keine Blöcke in die Hotbar); Abbau per Rechtsklick.
+		- Teilbelegte Flächen bleiben nutzbar: In der Zielzelle können mehrere Blöcke platziert werden, solange sie sich nicht überlappen (Overlap-Check).
+			- Armor-Formblöcke (neu): 3 Tiers (leicht/mittel/schwer) als Wedge/Corner:
+				- Wedge: `block_armor_light_wedge`, `block_armor_wedge` (mittel), `block_armor_heavy_wedge`
+				- Corner: `block_armor_light_corner`, `block_armor_corner` (mittel), `block_armor_heavy_corner`
+				- Farben (Platzhalter, später per Einfärben/Dyeing): leicht = grau, mittel = silber, schwer = gräuliches Weiß.
+				- Optik: zusätzlich pro Tier eine leichte „Panel/Plating“-Struktur (Shader-basiert), damit die Tiers auch ohne echte Texturen unterscheidbar sind.
+				- Platzierung: beim Platzieren per WASD in 90°-Schritten rotierbar (während LMT gehalten wird), skalierbar/extrudierbar (0.2 Schritte) wie andere `can_scale`-Blöcke.
+						- Technik: Rendering nutzt Shape-MultiMeshes (cull-back wie normale Blöcke; Wedge/Corner-Meshes nutzen clockwise Winding wie von Godot erwartet, damit die Außenflächen sichtbar sind; Transform-Basis wird als `rotation_basis.scaled(scale_vec)` gebaut, damit Rotation + non-uniform Scale korrekt zusammenarbeiten), Collision/Hitbox nutzt passende Convex-Formen (gleiche Basis-Komposition).
+					- Hinweis (Optik): Diagonale Flächen (Wedge/Corner) können bei triplanar gemischten Pattern schnell „verschmieren“; daher nutzt das Armor-Panel-Pattern eine „dominant axis“ Projektion (ein Projektions-Plane pro Face), damit die Flächen clean bleiben.
+			- Hotbar-Slots sind nur klick-/dragbar, wenn die Maus sichtbar ist; im Spielmodus (Mouse-Captured) blockieren HUD/Hotbar keine Build-Klicks (Mouse-Filter wird passend gesetzt).
+			- Hotbar: Aktiver Slot ist zusätzlich mit einem weißen Rahmen markiert.
+					- Inventar + Hotbar: Strukturblöcke (Debug) sind aus dem Start-Inventar entfernt; Armor ist jetzt der Standard (inkl. Armor-Cube pro Tier zusätzlich zu Wedge/Corner). Slot-Icons zeigen 3D-Miniaturen (isometrischer Winkel ~30° auf 2 Achsen), damit Formen (z.B. Armor Wedge/Corner) im UI klar erkennbar sind; die „inneren Kanten“ werden direkt im Icon-Render als Screen-Space Edge-Pass (Depth/Normal) gezeichnet (`shaders/screen_outline.gdshader` in `scripts/block_icon_cache.gd`), Silhouette wird dabei unterdrückt (nur innere Face-Kanten); in der World werden zusätzlich pro Block-Face subtile Fugen/Kanten per Shader betont (`face_edge_*` in `shaders/voxel_block*.gdshader`), damit gleichfarbige Blockflächen nicht zu einer „einzigen Fläche“ verschmelzen; Slot-Hintergrund ist neutral (dunkel), optional mit farbigem Rahmen.
+					- UX: Hover im Inventar zeigt den Blocknamen unten im Inventar (inkl. Stack-Count).
+				- Platzierung (Skalierung): Beim Anbauen wird der Block bündig auf die tatsächlich getroffene Blockfläche gesetzt (Scale/Offset werden berücksichtigt) und auf ein 0.2-Raster auf der Fläche gesnappt; bei Überschneidungen mit bestehenden Blöcken wird die Platzierung blockiert.
+			- Physik (aktueller Workaround): ShipStructure ist standardmäßig „gefreezed“ (RigidBody Freeze), damit die Spielfigur in 0G die Struktur nicht wegschiebt und sie nicht „wegdriftet“. Später: Pilot-/Unfreeze-Mode.
+	- Regel: Pro Schiff/Station ist nur 1 Core erlaubt (weitere Core-Platzierung wird blockiert).
+	- Kamera (Minecraft-First-Person): Kamera auf Eye-Height (ca. `camera_height`), Pitch-Clamp (±`pitch_limit_degrees`), Körper im First-Person optional ausblenden; Roll/Orbit/Zoom per Maus deaktiviert im First-Person.
+	- Galaxy-Map-Player ist als „Proxy“ gedacht (System-Zentrum), damit In-System-Offsets später nicht die Galaxy-Position verfälschen.
+- Wenn der Spieler im Zielsystem ist, werden grüne Marker in der Galaxykarte ausgeblendet (Target/Selektion), damit nichts mit dem Spieler-Marker überlappt.
+- Warp: Beim Ankommen im Zielsystem wird das Ziel/Marker automatisch gelöscht.
+- Spielerposition in der Galaxykarte: roter, pulsierender Punkt; Auswahl/Zielsystem: gleicher Punkt in grün; Punktgröße über `player_marker_size_norm` (orientiert an der System-Punktgröße `star_size_norm`).
+
+Begriffe / Ebenen
+- Galaxy-Map (UI): Übersicht & Navigation (nicht die „echte“ Welt).
+- System-Gameplay: „der Spielplatz“ – Asteroiden, Voxel, Schiffe, Stationen, Combat, Loot.
+- Darstellung/LOD: visuelle Repräsentation großer Entfernungen ohne echte Koordinaten/Physics.
+
+Warum „Chunks“ allein nicht reicht
+- Chunking ist gut für Streaming/Performance (nur Nähe laden), löst aber nicht automatisch:
+	- Far-Clip / Z-Buffer / Präzisionsprobleme bei riesigen Distanzen
+	- „Sonne ist groß, aber weit weg“ → sollte trotzdem sichtbar sein
+- Daher: Chunking + LOD + ggf. Projection/Impostors.
+
+LOD-Strategie (empfohlen)
+1) Near LOD (Gameplay-relevant)
+	- Vollständige 3D-Objekte mit Collision/Physics (Asteroiden/Schiffe/Stationen).
+	- Sichtweite/Spawn-Radius eher klein halten (Performance).
+2) Mid LOD (visuell, wenig Interaktion)
+	- Vereinfachte Meshes / reduzierte Details, Collision optional (oder nur grob).
+	- Für große Planeten/Stationen: sehr simple Meshes oder stark reduzierte Collider.
+3) Far LOD (rein visuell)
+	- Billboard/Impostor (unshaded Sprite/Quad) oder Sky-Sphere-Projektion.
+	- Keine Collision/Physics, nur Position/Richtung + Größenwirkung.
+
+„Projektion“ großer Objekte (Sonne/Planeten) – 2 sinnvolle Ansätze
+A) Sky-Sphere Projektion (sehr robust)
+	- Eine Kugel um den Spieler mit festem Radius (z.B. 2000–5000 Units).
+	- Große/ferne Objekte werden nach Richtung auf diese Kugel projiziert (Distanz wird über Größe/Helligkeit/Label vermittelt).
+	- Vorteil: Keine riesigen Weltkoordinaten nötig, immer sichtbar, stabil.
+B) Dual-World Rendering (Near/Far Layer)
+	- Zwei Render-Pässe: Near-World normal, Far-World nur astronomische Objekte (mit anderem Near/Far).
+	- Vorteil: echte 3D-Parallaxe für Far-Objekte, trotzdem stabil.
+	- Nachteil: mehr Rendering-Komplexität (Viewport/Compositing).
+
+Entscheidung
+- Wir setzen Ansatz A (Sky-Sphere Projektion) als MVP um.
+- Ansatz B bleibt optional (späterer Ausbau, wenn echte Far-Parallaxe zwingend wird).
+
+Konzept: „Andere Systeme als Sterne“ um den Spieler
+- Idee: Aus GalaxyService-Positionen (Map) eine lokale „Sternenkuppel“ im Gameplay erzeugen.
+	- Zeige z.B. nur die nächsten N Systeme oder die im Umkreis (Map-Distanz) des aktuellen Systems.
+	- Zielsystem/markiertes System visuell hervorheben (Farbe/Puls/Linie/Label).
+	- Das ist rein visuell; Warp/Navigation kommen weiterhin aus GalaxyService/Target.
+
+Floating Origin (wichtig für später)
+- Wenn der Spieler große Strecken fliegen kann, werden Float-Koordinaten unpräzise.
+- Lösung: „Floating Origin“: Welt-Root wird regelmäßig zum Spieler rezentriert.
+	- Für Gameplay-Objekte: relative Koordinaten bleiben klein → Physics stabil.
+	- Für „astronomische“ Referenzen: getrennte Repräsentation (Sky-Sphere/Impostor) oder eigene Koordinatensysteme.
+
+	Parameter / Settings (Vorschlag)
+	- Startsystem: `start_system_mode`, `start_system_id`.
+	- Orbit-TimeScale (Gameplay): `system_orbit_time_scale` (Default: 0.1; größer = deutlich schnellere Planeten-Orbits).
+	- System-Details-Scale (Gameplay): `system_details_to_world_scale` (Default: 1.0; aktuell 20x größer als zuvor: skaliert `GalaxyService`-Stern/Planeten/Orbits in Gameplay-Units, damit SystemWorld/Spawn-Distanzen nicht astronomisch groß werden).
+	- Sternfarben (GalaxyService): Default-Spektrum „weißgelblich → gelb → weißblau → türkis/rot“, Magenta sehr selten (kein Grün).
+	- Sonnenlicht (Key-Light): `system_sun_light_energy`, `system_sun_light_attenuation`, `system_sun_light_min_range`, `system_sun_light_range_padding`, `system_sun_light_color_from_star` (Sonne ist Haupt-Lichtquelle im System).
+	- Sonne (Glow/Look): `system_sun_emission_energy` (plus optional Bloom/Glow im `WorldEnvironment`, damit die Sonne „intensiv leuchtet“).
+	- Near-Spawn-Radius (Gameplay-Objekte): z.B. 5–20 km in Units (je nach Skalierung).
+- Mid-LOD-Bereich: z.B. 20–200 km.
+- Far-LOD ab: > 200 km (nur Impostor/Projektion).
+- Sky-Sphere Radius (Minimum, rein visuell): z.B. 3000–8000 Units (`sky_sphere_radius`).
+- Sky-Sphere Auto-Fit: `sky_sphere_auto_fit_enabled` + `sky_sphere_auto_padding` (passt den effektiven Radius nach oben an, damit Starfield/Marker sicher „hinter“ Gameplay-Objekten bleiben; verhindert das „Durchschimmern“).
+- Max Far-„Sterne“ (andere Systeme): z.B. 500–3000 als MultiMesh.
+- Starfield (Gameplay): `sky_starfield_system_limit` (Anzahl), `sky_starfield_base_scale` (Größe), `sky_starfield_target_*` (Ziel-Highlight).
+- Starfield (Gameplay): `sky_starfield_vertical_scale` (0 = flach wie Scheibe, >1 = vertikal stärker/„dicker“).
+- SystemWorld (Gameplay): `system_world_enabled`, `system_world_planet_limit`.
+- Asteroids (Gameplay): `asteroid_field_radius`, `asteroid_field_cell_size`, `asteroid_field_asteroids_per_cell`, `asteroid_field_max_instances`, `asteroid_field_update_interval_s`.
+- Floating Origin: `floating_origin_enabled`, `floating_origin_recenter_distance`, `floating_origin_recenter_snap`, `floating_origin_recenter_on_enter_system` (hält Gameplay-Koordinaten klein; Galaxy-Map bleibt stabil).
+- Ziel-Indikator (HUD): `target_indicator_enabled`, `target_indicator_edge_margin_px`, `target_indicator_smoothing`, `target_indicator_color`, `target_indicator_show_when_on_screen`, `target_indicator_change_tween_enabled`, `target_indicator_change_tween_time`, `target_indicator_change_min_alpha`, `target_indicator_change_min_scale`, `target_indicator_visibility_tween_enabled`, `target_indicator_visibility_tween_time`, `target_indicator_visibility_min_alpha`, `target_indicator_visibility_min_scale` (On-/Off-Screen Hinweis Richtung Ziel + Fade/Scale beim Zielwechsel + weiches Ein-/Ausblenden).
+- System-Fokus (Galaxy-Map/System-View): `system_focus_pick_radius_px`, `system_focus_marker_size_norm`, `system_focus_color` (Fokus-Marker im System + Klick-Toleranz).
+- System-Fokus (Screen-Size): `system_focus_screen_size_px` (Marker bleibt beim Zoomen gleich groß in Pixeln).
+- Marker-Polish: `sky_marker_spawn_tween_enabled`, `sky_marker_spawn_tween_time`, `sky_marker_spawn_start_scale_fraction`, `sky_marker_despawn_tween_enabled`, `sky_marker_despawn_tween_time`, `sky_marker_despawn_end_scale_fraction` (weiche Scale-In/Scale-Out Einblendung der Sky-Marker).
+- Update-Intervall für Far-Projektion: z.B. 0.25–1.0s (nicht jeden Frame nötig).
+
+Todo-Plan (inkrementell, ohne Big Bang)
+1) System-Kontext festziehen (minimal)
+	- Im Gameplay muss klar sein, welches System „aktuell“ ist (z.B. last_warped_system_id).
+	- Bei Warp: Current-System setzen, Systemdaten (Stern/Planeten) holen, Sky-Sphere refreshen.
+	- Status: MVP umgesetzt (Current-System + Refresh bei Warp/Start; Startsystem wählbar).
+2) System-Gameplay-Szene (Grundgerüst)
+	- Root Nodes: NearRoot, MidRoot, SkyRoot (Sky-Sphere).
+	- SkyRoot folgt nur der Spieler-Position (Translation), keine Rotation (damit Richtungen stimmen).
+	- Status: MVP umgesetzt (Scene-Roots vorhanden).
+3) Sky-Sphere-Projektion (MVP)
+	- „Astronomical Objects“ werden als Marker auf den Sky-Sphere Radius projiziert: dir = normalize(world_or_map_delta).
+	- Start: 1 Marker für Stern + Planetenmarker (aus `GalaxyService.get_system_details()` / Planet-Details).
+	- Größen-/Helligkeitsmodell erstmal simpel (z.B. anhand Orbit-Radius/Norm-Distanz), später verfeinern.
+	- Status: MVP umgesetzt (Marker + Orbit-Update aus `orbit_speed`/`orbit_phase`).
+4) „Andere Systeme als Sterne“ (Sky-Starfield)
+	- MultiMesh-Starfield auf Sky-Sphere aus Galaxy-Daten (Nächste N um Current-System).
+	- Target-System highlight (Farbe/Puls) über `GalaxyService.target_changed`.
+	- Update per Timer (0.25–1.0s), nicht jeden Frame.
+	- Wichtig: Für MultiMesh `custom_aabb` setzen, sonst kann Frustum-Culling beim Drehen „Flackern“ verursachen.
+	- Rendering: Starfield nutzt Depth-Test, schreibt aber nicht in den Depth-Buffer (`DEPTH_DRAW_DISABLED`), damit es stabil „hinter“ Gameplay/Marker bleibt.
+	- Status: MVP umgesetzt (MultiMesh + Target-Marker, Update bei Warp/Target-Change).
+5) Streaming/LOD für Gameplay-Objekte
+	- Asteroiden/POIs in Zellen/Chunks streamen (nur Near/Mid aktiv).
+	- Budget: max aktive Entities pro Bereich.
+	- Status: MVP umgesetzt (Asteroiden als zellenbasiertes MultiMesh-Streaming um den Spieler; aktuell rein visuell, ohne Collision/Mining).
+6) Floating Origin (wenn nötig)
+	- Erst triggern, wenn reale Distanzen/Koordinaten groß werden (Physics/Precision messbar).
+	- Status: MVP umgesetzt (Recenter via `floating_origin_*`, optional beim Systemwechsel).
+7) Polish/UX
+	- Weiches Ein-/Ausblenden bei Marker/LOD-Wechseln, klare Ziel-/Warp-Infos (On-/Off-Screen Marker optional).
+	- Status: MVP teilweise umgesetzt (Target-Offscreen-Indikator im HUD + weiche Sky-Marker-Scale-In/Out Einblendung + Distanz im Ziel-Label + Fade/Scale beim Zielwechsel + weiches Ein-/Ausblenden + Warp-Hinweis im HUD + System-Fokusmarker für gezielten Warp im System).

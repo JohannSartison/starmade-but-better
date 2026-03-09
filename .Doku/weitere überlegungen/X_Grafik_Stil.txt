@@ -1,0 +1,76 @@
+Grafik-Stil – Cel Shading (Toon Look) – Konzept & Plan
+
+Zielbild
+- Das Spiel soll einen klaren Cel/Toon-Look bekommen: harte Lichtstufen (Toon-Ramp), reduzierte Specular/Reflections, klare Farbpalette.
+- Lesbarkeit & Performance haben Vorrang (viele Voxel/Meshes, ggf. VR/XR im Projekt).
+
+Ist-Zustand (im Projekt)
+- Standard Godot 4 3D Rendering (Forward+), keine Cel/Toon-Pipeline aktiv.
+- Assets/Materialien sind überwiegend “StandardMaterial3D”/Default-Look (keine einheitliche Ramp/Outline).
+- Lighting (MVP): Sonne als Key-Light im System + sanfte Ambient-Fill (damit Schattenseiten nicht komplett schwarz werden); optional Glow/Bloom für „intensiv leuchtende“ Emissives.
+- Sonne (System-View): Shader-basierte Oberfläche mit animiertem Noise (sun_surface.gdshader) und Rim-Glow (sun_glow.gdshader), steuerbar über Exports in scripts/main.gd.
+- Corona/Randglühen: Rim-Glow als „Corona“ mit unregelmäßiger Kante (Noise/Spicules) und Backface-Rendering (cull_front), um nicht wie eine flache Scheibe zu wirken (shaders/sun_glow.gdshader, Parameter system_sun_corona_* in scripts/main.gd).
+- Sun-Color Boost: HSV-basierte Sättigung/Helligkeit der Sternfarbe im System-View (siehe system_sun_color_saturation/system_sun_color_value in scripts/main.gd).
+- Galaxy-View Sterne: eigene Emission über ShaderMaterial (VertexColor → Emission), mit niedrigerem Albedo gegen „weißes“ Auswaschen (shaders/galaxy_star.gdshader, Parameter in scripts/ui_galaxy_view_3d.gd).
+- Sternfarben-Gradient/Spektrum: breites Farbspektrum (Rot/Orange/Gelb/Magenta/Blau/Cyan) ohne Grün; Grün-Bereich (~80°–180° Hue) wird übersprungen/geklemmt. Verteilung: Farbtöne werden pro System über `system_id` (Golden-Ratio Offset) gestreut, damit es nicht „alles gleich warm“ wirkt (scripts/galaxy_service.gd).
+- HSV-Boost: Sättigungs-Bias + begrenzter HDR-Wert (max ~1.2), um Weißanteil zu reduzieren und Farben kräftig zu halten.
+- Sun Shader: weniger Weiß-Mix, mehr reines Farbsignal (shaders/sun_surface.gdshader).
+- Occlusion-Fix: Sun-Oberfläche ist opak (kein ALPHA-Output), damit das Sky-Starfield nicht „durch“ die Sonne rendert (shaders/sun_surface.gdshader).
+- Bloom/Glow: Default-Werte weiter reduziert, um Auswaschen zu vermeiden (scenes/main.tscn, scripts/ui_galaxy_view_3d.gd).
+- Fallback-Farben für Sterne/Map angepasst (weniger Weiß, höhere Sättigung).
+- Lens-Flare: aktuell deaktiviert/entfernt (kein Quad-Effekt).
+- Outlines (B, initial): Screen-Space Outline (Depth/Normal) via `shaders/screen_outline.gdshader`, als `ScreenOutline`-Quad unter den Kameras in `scenes/player_ship.tscn` (Desktop + VR), Default subtil.
+- UI (Inventar/Hotbar): Block-Icons bekommen „innere Kanten“ über einen Screen-Space Edge-Pass (Depth/Normal) im Icon-Viewport (`shaders/screen_outline.gdshader` via `scripts/block_icon_cache.gd`); Silhouette wird unterdrückt (nur innere Face-Kanten) – getrennt vom World-Outline.
+- Voxel-Blöcke (World): Zusätzlich werden pro Block-Face subtile Fugen/Kanten über Material-Shading betont (`face_edge_*` in `shaders/voxel_block.gdshader` und `shaders/voxel_block_shape.gdshader`), damit gleichfarbige Oberflächen nicht wie „eine große Fläche“ wirken.
+
+Wichtige Stil-Entscheidungen (vor Umsetzung klären)
+1) Outlines
+	- A) Mesh-Outlines (Inverted Hull): sehr stabil, günstiger, aber pro Mesh extra Draw.
+	- B) Screen-Space Outline (Depth/Normal): ein Post-Pass, aber je nach Geometrie/VR anfälliger.
+	- Entscheidung: dick/Comic (stark) vs. subtil (leicht).
+2) Toon-Shading Charakter
+	- Anzahl Stufen (z.B. 3–5), Ramp-Form (hart vs. leicht weich), Rim-Light ja/nein.
+	- Specular: aus, oder “Hard Spec” als extra Stufe.
+3) Farben/Palette
+	- Basis-Palette (UI/World), Sättigung, Kontrast, Fog/Atmosphäre.
+4) Performance & VR
+	- XR: bevorzugt wenig Post-FX, stabile Kanten, keine flimmernden Screen-Space Effekte.
+
+Festgelegte Entscheidungen (Stand: jetzt)
+- Outlines: subtil (leicht, nicht Comic-dick). Methode: B) Screen-Space Outline (Depth/Normal Post-Pass). Hinweis: In VR unbedingt früh testen; falls Flimmern/Artefakte zu stark sind → Fallback auf A (Mesh-Outlines).
+- Toon-Ramp: hart (keine weichen Übergänge), Ziel: 3–5 Lichtstufen (MVP kann mit 4 starten).
+- Rim-Light: nein (Look soll rein über Toon-Lichtstufen funktionieren).
+- Specular: “Hard Spec” als eigener Highlight-Patch mit 2 Stufen (on/off), keine weichen Specular-Verläufe.
+- VR ist das Ziel: Post-FX sparsam, stabile Kanten, Flimmern vermeiden.
+- PBR-Anteil: gemischt (z.B. Glas/Metall/Displays dürfen mehr “stylized PBR”, der Rest bleibt toon).
+
+Technischer Plan (MVP → Ausbau)
+MVP 1: Toon-Shading Basis (Material-Level)
+- Ein zentraler Toon-Shader (ShaderMaterial) mit:
+	- N·L Quantisierung über Ramp (GradientTexture/Texture2D) oder Steps.
+	- Optional: Rim-Light (Fresnel) als eigener, schwacher Add.
+	- Optional: “Hard Spec” (nur wenn gewünscht).
+- Eine “Toon-Material”-Vorlage für häufig genutzte Meshes (PlayerShip, Blöcke).
+
+MVP 2: Outlines
+- Variante: B) Screen-Space (Depth/Normal), VR-Test früh; Fallback A) falls nötig.
+- A) Mesh-Outlines: kleines Helper-Script/Tooling, das für ausgewählte MeshInstances ein Outline-Child erzeugt.
+- B) Screen-Space: Fullscreen-Shader (Depth+Normals), einstellbare Dicke/Farbe/Depth-Threshold.
+
+MVP 3: World-Setup & Post
+- Environment/WorldEnvironment: Bloom/Glow reduzieren, ggf. Color Correction (LUT) für Look.
+- Licht-Setup: 1 Key-Light + optional Fill, harte Schatten (oder weiche, aber stilisiert).
+
+Ausbau (Polish)
+- Dithering/Posterize (optional), stylisierte Nebel-/Atmosphäre.
+- Material-Presets pro Kategorie (Metall, Glas, “Voxel Block”, UI-Emissive).
+- Konsistente Outline-Farbe (z.B. leicht dunkelblau statt schwarz).
+
+Done-Kriterien (für “Cel Shading MVP”)
+- PlayerShip + 2–3 typische Welt-Meshes wirken sichtbar “Toon”.
+- Outlines sind konsistent (oder bewusst weggelassen) und flimmern nicht.
+- Performance bleibt stabil (Desktop; XR nur wenn relevant).
+
+Notizen / Offene ToDos
+- Wenn wir VR ernsthaft nutzen: Screen-Space Outlines zuerst testen, ggf. auf Mesh-Outlines wechseln.
+- Festlegen, ob wir “realistische” PBR-Elemente komplett vermeiden oder stilisiert integrieren.

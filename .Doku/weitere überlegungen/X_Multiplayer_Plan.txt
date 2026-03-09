@@ -1,0 +1,177 @@
+Multiplayer & Persistenz (Savegame) – Konzept & Plan
+
+Stand: 2025-12-27
+
+Ziel
+- Das Spiel soll im Koop (und später optional PvP) spielbar sein.
+- Der Fortschritt soll gespeichert werden, damit Spieler beim Neustart nicht „irgendwo anders“ spawnen und nicht jedes Mal neu anfangen müssen.
+- Das System soll inkrementell wachsen (MVP → stabil → Features), ohne Big-Bang-Umbau.
+
+
+Zielbild (MVP)
+- Host startet eine Session (Listen-Server): Host ist Server + spielt selbst.
+- Clients können beitreten (LAN/Direct IP).
+- Spieler sehen sich gegenseitig:
+	- Bewegung/Rotation synchron.
+	- Warp/Systemwechsel synchron.
+- Spieler-Fortschritt bleibt erhalten:
+	- Letztes System + Position (Spawn) wird gespeichert.
+	- Inventar/Hotbar wird gespeichert.
+	- Gebaute Strukturen (Ship/Station) werden gespeichert.
+
+
+Grundmodell (Netcode)
+Autoritativer Server (empfohlen)
+- Server ist „Source of Truth“ für:
+	- PlayerState (Position/Velocity, Inventory, Hotbar, Ownership).
+	- WorldState (galaxy_seed, entdeckte Systeme, Strukturen, Asteroiden/POIs falls persistent).
+- Clients senden nur Eingaben/Requests (Movement-Input, Warp-Request, Build-Request).
+- Server validiert und repliziert Änderungen an alle Clients.
+
+Warum so?
+- Weniger Cheating/Desync, bessere Grundlage für später (PvP, Economy, Griefing-Schutz).
+- Persistenz passt natürlich dazu: Server speichert die Wahrheit, nicht jeder Client separat.
+
+
+Persistenz (Fortschritt speichern)
+Zwei Modi
+1) Singleplayer / Offline
+	- Save liegt lokal in `user://`.
+2) Multiplayer (Host/Server)
+	- Save liegt beim Host/Server (ebenfalls `user://` auf der Host-Maschine).
+	- Clients bekommen beim Join nur den relevanten Snapshot (oder werden in die Welt „gepatched“).
+
+Was muss gespeichert werden (Minimum)
+- Save-Metadaten: `save_version`, `created_at`, `last_played_at`.
+- WorldState:
+	- `galaxy_seed` (damit prozedurale Inhalte reproduzierbar bleiben).
+	- Optional: „Discovery“ (welche Systeme wurden besucht/entdeckt).
+	- Optional: globale „Warp-Ziele“ / aktive Missionen (später).
+- Pro Player (PlayerState), keyed per Player-ID:
+	- `player_id` (stabil, nicht nur Peer-ID).
+	- `current_system_id` (int) + optional `current_system_map_position`.
+	- `position_world` (Vector3) + optional `rotation` + optional `velocity`.
+	- `inventory` + `hotbar` + `active_hotbar_slot`.
+	- Ownership/Team/Faction (später).
+- Strukturen (Ship/Station) – wenn gebaut wird:
+	- Structure-ID + Core-Position/Owner.
+	- Block-Liste / Block-Daten (Type, Transform/Scale, Rotation, Meta wie Farbe/Tier).
+	- Optional: Docking/Verbindungen (später).
+
+Wichtig (damit Spawn stabil ist)
+- Beim Start gilt:
+	- Wenn Save existiert: Spieler spawnt in `current_system_id` an der gespeicherten Position.
+	- Wenn kein Save existiert: aktuelles Startsystem-Setup (Random/Specific/Choose) wird genutzt.
+- Beim Warp gilt:
+	- Warp schreibt `current_system_id` + neue Position in den Save (oder markiert „dirty“ für Autosave).
+
+
+Player-ID (damit Fortschritt pro Spieler eindeutig ist)
+MVP-Vorschlag
+- Beim ersten Start eine GUID erzeugen und lokal speichern (z.B. `user://player_id.txt`).
+- Im Multiplayer sendet der Client diese ID beim Join an den Server.
+- Server lädt/erstellt den PlayerState anhand dieser ID.
+
+Später (optional)
+- Account/Login/Steam-ID o.Ä. statt GUID.
+
+
+Synchronisation (welche Daten wie?)
+Bewegung (MVP)
+- Server-authoritative Movement:
+	- Client schickt Input (WASD/Mouse/Boost) in fixed Rate.
+	- Server simuliert und sendet Transform-Updates (unreliable, z.B. 10–20 Hz).
+	- Clients interpolieren (glatt) und korrigieren bei Abweichung.
+
+Warp/Systemwechsel
+- Warp ist server-only: Client sendet Warp-Request → Server entscheidet → Server setzt Position/System und broadcastet.
+- Beim Wechsel: Server sendet „SystemContext“ (current_system_id + seed/details), Clients refreshen Sky/World-Instanzen.
+
+Inventory/Hotbar
+- Kein „tick-sync“, nur Events:
+	- Add/Remove/Move/Hotbar-Set/ActiveSlot-Change als RPC-Event.
+	- Server bestätigt/replicated; Client-UI ist nur View.
+
+Bauen/Abbauen (Voxel/ShipStructure)
+- Clients senden Build-Requests:
+	- place/remove/scale/rotate + Target-Structure-ID + Block-Daten.
+	- Server validiert (Overlap, Reichweite, Rechte, Ressourcen).
+	- Server wendet an und sendet Delta-Updates (nicht komplette Struktur).
+
+Prozedurale Inhalte (Galaxie/Asteroiden)
+- Seed-basierte Generierung:
+	- Server sendet Seeds/IDs, Clients generieren visuell lokal.
+	- Persistente Änderungen (abgebauter Asteroid, platzierte POIs) müssen vom Server kommen (oder server-seitig geloggt werden).
+
+
+Risiken / Stolpersteine
+- Performance: Strukturen (viele Blöcke) dürfen nicht „full snapshot“ ständig übertragen.
+	- Lösung: Delta-Updates + Chunking + Join-Snapshot nur bei Bedarf.
+- Desync bei Build: Validierung muss strikt serverseitig sein.
+- Savegame-Größe: Blockdaten können groß werden.
+	- Lösung: Kompaktes Format (z.B. Dictionaries → PackedByteArray/Kompression), Versionierung + Migration.
+- Floating Origin: Wenn aktiv, muss klar sein, ob gespeicherte Positionen „absolut“ oder „relativ“ sind.
+	- Lösung: Save speichert eine klare Referenz (z.B. system-local Koordinaten + floating_origin_offset separat).
+
+Ist-Zustand (im Projekt)
+- Persistenz-Basis (Singleplayer) ist implementiert (Plan Schritt 1).
+	- Autoload: `SaveService` ist registriert (siehe `project.godot`).
+	- Save-Datei: `user://savegame.json` (JSON) mit `save_version`.
+	- Gespeichert wird aktuell:
+		- `galaxy_seed`
+		- Player: `current_system_id`, `abs_position`, `rotation_quat`, `velocity`
+		- Inventory: Slot-Liste (`id`, `count`)
+		- Hotbar: `items`, `active_slot`
+	- Speichern passiert:
+		- beim Warp (Galaxy-Warp)
+		- beim Beenden / Window-Close
+	- Laden passiert:
+		- beim Start (wenn Save existiert und Version passt)
+	- Fallback:
+		- ohne Save läuft der bisherige Start-Flow (Startsystem + Startinventar/Hotbar).
+- Noch offen in Schritt 1 (bewusst minimal gehalten):
+	- keine Strukturen/Ships gespeichert
+	- keine Autosave-Timer (nur On-Warp/On-Exit)
+	- kein Save-Slot-Management (nur 1 Datei)
+- Minimaler Multiplayer-Stack (Plan Schritt 2) ist als MVP implementiert.
+	- Autoload: `NetworkManager` ist registriert (Host/Join/Leave via ENet).
+	- Debug-Controls (MVP):
+		- F1: Host starten (`net_port`)
+		- F2: Join (`net_join_address`:`net_port`)
+		- F3: Leave
+	- Player-Spawns:
+		- Remote-Player werden als `RemotePlayer_<peer_id>` unter `NetPlayers` instanziert.
+		- Remote-Player haben Input/Physics deaktiviert (nur „Proxy“).
+	- Movement-Sync (MVP):
+		- Client → Server: sendet abs. Position/Rotation/Velocity (unreliable, Intervall `net_state_send_interval_s`).
+		- Server → Clients: relayed State pro Player (unreliable).
+		- Darstellung ohne Interpolation/Prediction (reines „Transform-Set“).
+
+Plan (inkrementell, ohne Big Bang)
+1) Persistenz-Basis (Singleplayer zuerst)
+	- Status: umgesetzt (Stand: 2025-12-27)
+	- `SaveService` (Autoload) + 1 Save-Slot.
+	- Speichern/Laden: `current_system_id` + Player-Transform + Inventory/Hotbar.
+	- Done wenn: Neustart startet zuverlässig am letzten Ort mit gleichem Inventar.
+2) Minimaler Multiplayer-Stack
+	- Status: MVP umgesetzt (Stand: 2025-12-27)
+	- `NetworkManager` (Host/Join/Leave).
+	- Spawn/Despawn von PlayerShips (remote proxies).
+	- Done wenn: 2 Clients sehen sich im selben System und bewegen sich synchron.
+3) Warp synchronisieren
+	- Warp-Request → Server entscheidet → Broadcast Systemwechsel + neue Position.
+	- Done wenn: Warp bei allen sauber im gleichen System landet und UI/Sky refresh stabil ist.
+4) Inventar/Hotbar synchronisieren
+	- Server-authoritative Änderungen (Events).
+	- Done wenn: Craft/Build/Remove (später) bei allen konsistent ist.
+5) Bauen synchronisieren (Delta-Events)
+	- Place/Remove/Scale/Rotate als Requests + serverseitige Validierung.
+	- Done wenn: 2 Spieler gemeinsam an derselben Struktur bauen können.
+6) Persistenz für Multiplayer (Server/Host)
+	- Server speichert WorldState + PlayerState + Strukturen.
+	- Join: Server lädt PlayerState anhand Player-ID.
+	- Done wenn: Spieler reconnecten können und ihr Schiff/Inventar wieder da ist.
+7) Stabilität/Polish
+	- Autosave (Timer + On-Warp + On-Build).
+	- Disconnect/Reconnect Handling.
+	- Debug-Overlay (Net-Stats, Save-Dirty, Ping).

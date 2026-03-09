@@ -1,0 +1,234 @@
+Plan: Galaxy- & System-Neuaufbau (Neustart)
+
+Stand: 2025-12-30
+
+Kurzbeschreibung
+- Wir verwerfen den bisherigen Galaxy-/Systemaufbau komplett.
+- Neue Basis: Galaxy mit Spiralarme(n), schwarzes Loch im Zentrum, Zellgitter als Grundstruktur.
+- Systeme: Eine Sonne mit Planeten und Orbits (deterministisch aus Seeds).
+- Sky-Sphere: Sterne werden aus der Galaxy-Position im 3D-Raum um die aktuelle Zelle projiziert.
+
+Zielbild
+- Eine einheitliche Welt: Galaxykarte, Zellen und Spielwelt nutzen dieselben Daten und Koordinaten.
+- Systemwechsel folgt eindeutig der Zelle (kein separater "Systemmodus").
+- Sky-Sphere zeigt stets eine konsistente Projektion der Galaxy um die aktuelle Zelle.
+
+Kernkonzepte
+1) Galaxy als 3D-Zellgitter
+   - Zellgroesse = cell_size_map (Map-Einheit).
+   - Zell-ID = floor(map_pos / cell_size_map).
+   - Zellzentrum = (cell + 0.5) * cell_size_map.
+   - Zell-Seed = Hash(cell_xyz, galaxy_seed).
+   - Jede Zelle ist deterministisch: System oder leer.
+
+2) Galaxy-Generator (Spiralarme + Schwarzes Loch)
+   - Basis: Spiralarm-Verteilung im XZ, vertikale Streuung in Y.
+   - Black-Hole-Zone: Innenradius ohne Systeme + weiche Uebergangszone.
+   - Dichte-Funktion: abhaengig von Radius, Arm-Phasenwinkel, Streuung.
+   - Zellentscheidung: Aus Zell-Seed wird entschieden, ob die Zelle ein System enthaelt.
+   - Systemposition in Zelle: Jitter um Zellzentrum (max. definierter Anteil der Zellgroesse).
+
+3) System-Generator (Sonne + Planeten)
+   - system_seed = Zell-Seed (oder abgeleitet daraus).
+   - Sternklasse: Farbe, Groesse, Emission.
+   - Planeten: Anzahl, Orbit-Radien, Inclination, Umlaufgeschwindigkeit.
+   - Alle Parameter deterministisch aus dem Seed (gleicher Seed = gleiches System).
+   - system_radius = max(Orbit + Planetenradius), damit die System-Ansicht/Skalierung
+     den tatsaechlichen System-Extent nutzt (kein ungenutztes Padding).
+
+4) Systemwechsel (Zellbasiert)
+   - Aktuelle Zelle aus player_abs -> map_pos -> cell_id.
+   - Wenn Zell-ID wechselt:
+     - System in neuer Zelle laden (falls vorhanden).
+     - Leere Zelle: definierter Basissatz (z.B. Asteroidenfeld + Ambient-Light).
+   - Hysterese an Zellgrenzen, um Flackern zu vermeiden (Wert definieren).
+
+5) Galaxykarte (UI/Map)
+   - Map zeigt exakt dieselben Zellen/Systemdaten wie das Gameplay.
+   - LOD/Zoom steuert nur die Darstellung, nicht die Datenbasis.
+   - Auswahl eines Systems = Fokus auf Zellzentrum (kein "Moduswechsel").
+
+6) Sky-Sphere (Projektion der Galaxy um die aktuelle Zelle)
+   - Quelle: Systeme im Radius um die aktuelle Zelle (z.B. N Nachbarzellen).
+   - Richtung = (system_pos_map - cell_center_map) normalisiert.
+   - Projektion auf Einheitssphaere, dann Skalierung auf Sky-Sphere.
+   - Helligkeit/Groesse nach Distanz (weicher Falloff).
+   - Aktualisierung: bei Zellwechsel (nicht pro Frame), optional glattes Crossfade.
+
+7) Daten & Determinismus
+   - Ein Generator fuer Galaxy + System, wiederverwendbar in Map und Gameplay.
+   - Keine doppelten "Scale"-Definitionen; eine zentrale Quelle.
+   - Savegame speichert mindestens: galaxy_seed, aktuelle Zelle, player_abs, floating_origin_offset.
+
+Implementations-Phasen (Neustart)
+Status (aktuell)
+1) Schritt 1: umgesetzt
+   - [x] GalaxyCoords + zentrale Map/Cell/World-Umrechnung.
+   - [x] Main/UI auf GalaxyCoords umgestellt.
+2) Schritt 2: umgesetzt
+   - [x] Zell-Generator, Zell-Index in GalaxyService.
+   - [x] Zell-Jitter + Zell-Queries in Main/UI.
+3) Schritt 3: teilweise
+   - [x] System-Generator deterministisch (Sonne/Planeten).
+   - [x] Orbit-Abstaende mit Mindestabstand (keine identischen Bahnen).
+   - [x] System-Tilt + Orbit-Phasen/Tempo 1:1 (Galaxy-Detail, Gameplay, Sky-Marker).
+   - [x] Detail-LOD in Zelle an Zellgrenzen gekoppelt (60-80% + Clamp).
+   - [x] Finaler Abgleich Systemgroesse <-> Zellgroesse (Gameplay + Galaxy).
+4) Schritt 4: umgesetzt
+   - [x] Zell-Queries aus Player-Map/Index nutzbar.
+   - [x] Zellwechsel-Hysterese final implementiert (map-basiert + Padding).
+   - [x] Streaming/Load-Unload bei Zellwechsel abgeschlossen (System/Leerzelle + Ambient).
+5) Schritt 5: teilweise
+   - [x] Fokuszelle zeigt Detail-LOD ohne View-Wechsel (Galaxy bleibt sichtbar).
+   - [x] Fokus/Selection per LMB zellbasiert.
+   - [x] Zoom-LOD-Stufen fuer alle Zellen/Marker/Frames.
+   - [x] Nachbarzellen-Frames/UX-Schwellen final abstimmen.
+6) Schritt 6: umgesetzt
+   - [x] Sky-Sphere-Projektion (Sampling, Falloff, Updates).
+7) Schritt 7: offen
+   - [ ] Debug-Overlay/Tools (Zellen, Seeds, Fixierung).
+
+Zusatz-Umsetzungen (seit letztem Stand)
+- System-Details direkt in der Galaxy-Zelle (kein View-Wechsel), Fokus per LMB, Galaxy bleibt sichtbar.
+- Fokus-Detailgroesse an Zellrand gekoppelt (60-80% Zellkante, Clamp an Zellgrenzen).
+- System-Tilt deterministisch pro System; 1:1 in Galaxy-Detail, Gameplay und Sky-Marker.
+- Orbit-Phasen/Tempo der Galaxy-Details an Gameplay-Zeit gekoppelt.
+- Planetare Orbit-Radien sortiert + Mindestabstand (keine identischen Bahnen).
+- Zell-Jitter getrennt: system_position_jitter_fraction (XY) und system_position_jitter_fraction_y (Y).
+- Zellwechsel: map-basierte Hysterese/Padding + Current-Cell-Tracking; Ambient korrekt beim Zellwechsel.
+- Galaxy-LOD: Marker/Frames per Screen-Fill-Schwellen, Nachbarzellen-Frames erst im Detail-LOD.
+- Sky-Sphere: Zellradius-basiertes Starfield, Projektion vom Zellzentrum, Distanz-Falloff, Update bei Zellwechsel.
+
+1) Datenmodell & Utilities
+   - Definiere Map/Cell/World-Umrechnung zentral.
+   - Definiere Zell-Seed-Funktion und System-Seed-Ableitung.
+   - Umsetzung: `scripts/galaxy_coords.gd` (GalaxyCoords).
+   - Umstellung: `scripts/main.gd`, `scripts/ui_galaxy_view_3d.gd`, `scripts/ui_galaxy_view.gd` und `scripts/ui_galaxy_window.gd` nutzen GalaxyCoords fuer Zell-/Map-Umrechnungen.
+   - Vorbereitung: `scripts/galaxy_service.gd` bietet Zell-/Seed-Hilfen auf Basis von GalaxyCoords.
+
+2) Galaxy-Generator
+   - Spiralarm-Dichte, Black-Hole-Zone, Zellentscheidung.
+   - Funktionen fuer: has_system(cell), system_position(cell).
+   - Umsetzung: `scripts/galaxy_service.gd` nutzt Zell-Grid + One-System-Per-Cell, mit Zell-Jitter.
+
+3) System-Generator
+   - Stern + Planeten aus system_seed.
+   - Orbits berechnen und im System-Scene umsetzen.
+
+4) Systemwechsel & Streaming
+   - Zellwechsel erkennen, Inhalte laden/entladen.
+   - Hysterese einbauen und testen.
+
+5) Galaxykarte
+   - Darstellung der Zellen und Systeme mit Zoom-LOD.
+   - Fokus/Selection immer zellbasiert.
+
+6) Sky-Sphere
+   - Projektionspipeline fuer Sternpunkte.
+   - Distanz-Falloff, Farb- und Groessenmapping.
+
+7) Debug/Tools
+   - Overlay: aktuelle Zelle, Nachbarzellen, System-ID, Seed.
+   - Debug-Switch: "fixiere Zelle" und "zeige Zellenrahmen".
+
+Festlegungen (aus Rueckmeldung)
+1) Zellgroesse (World): 1.000.000 Einheiten pro Zelle als Zielgroesse.
+   - world_to_map_scale = 0.1 / 1_000_000 (0.0000001).
+   - Daraus folgt: cell_size_map = cell_size_world * world_to_map_scale = 0.1 Map-Einheiten.
+   - Hinweis: Floating Origin beibehalten, damit grosse Distanzen keine Praezisionsprobleme verursachen.
+2) Spiralarm-Parameter: Startwerte aus der aktuellen Galaxy ableiten.
+3) Black-Hole-Radius + Falloff: aus der aktuellen Galaxykarte ableiten.
+4) System-Dichte pro Zellring: aus der aktuellen Galaxy ableiten.
+5) Sky-Sphere: so gross/weit, dass Systemobjekte sichtbar bleiben und die Sky-Sphere nichts ueberdeckt.
+   - Rendering-Hinweis: Sky-Sphere immer im Hintergrund rendern (kein Depth-Test/Write).
+   - Vorschlag: Sky-Sphere-Radius = 0.95 * Kamera-Far, zentriert auf Spieler.
+   - Stern-Sampling: Radius 3 Zellen, Falloff mit smoothstep bis Rand.
+6) Hysterese: 3% der Zellgroesse an Zellgrenzen.
+
+Ableitung aus aktueller Galaxy (konkrete Quelle)
+- Quelle: scripts/galaxy_service.gd (aktuelle GalaxyService-Parameter).
+- Spiralarm-Form/Verteilung uebernehmen:
+  - arm_count, spiral_tightness, arm_spread, interarm_fraction,
+    arm_width_multiplier, interarm_width_multiplier, radial_power,
+    core_fraction, core_radius, vertical_spread, color_variation.
+- Black-Hole-Zone uebernehmen:
+  - black_hole_system_free_radius (Innenradius, normiert 0..1)
+  - black_hole_density_falloff_width (Uebergangsbreite, normiert 0..1)
+- Galaxy-Ausdehnung/Skalierung uebernehmen:
+  - galaxy_position_scale, galaxy_position_bias, galaxy_vertical_bias.
+- System-Dichte pro Zellring ableiten:
+  - Nutze system_count + Verteilung der aktuellen Systeme (normalized_distance)
+    als Histogramm ueber Radialringe.
+  - Berechne pro Ring: p(cell_has_system) = systems_in_ring / cells_in_ring.
+  - cells_in_ring = ring_area / (cell_size_map^2) * height_factor,
+    height_factor aus vertical_spread.
+  - Ergebnis: Kurve p(r) fuer die Zellentscheidung im neuen Generator.
+
+Aktuelle Werte (Stand: scripts/galaxy_service.gd)
+- system_count = 42000
+- arm_count = 5
+- spiral_tightness = 0.5
+- arm_spread = 0.28
+- interarm_fraction = 0.33
+- arm_width_multiplier = 0.45
+- interarm_width_multiplier = 1.9
+- radial_power = 0.85
+- core_fraction = 0.18
+- core_radius = 0.22
+- vertical_spread = 0.04
+- color_variation = 0.05
+- black_hole_system_free_radius = 0.03
+- black_hole_density_falloff_width = 0.9
+- galaxy_position_scale = 18.0
+- galaxy_position_bias = 0.35
+- galaxy_vertical_bias = 0.35
+- cell_size_map = 0.1
+- system_position_jitter_fraction = 0.15
+- system_position_jitter_fraction_y = 0.2
+- system_tilt_degrees_min = 2.0
+- system_tilt_degrees_max = 8.0
+
+Dichtekurve (Sample, aus aktueller Galaxy-Logik abgeleitet)
+- Basis: r_norm aus _generate_systems (normalized_distance), 10 Ringe.
+- Seed: 1337 (Sample), RNG: Python-Standard (Verteilungsvorlage).
+- cell_size_map = 0.1, scale = galaxy_position_bias * galaxy_position_scale = 6.3.
+- height_factor = 6 * vertical_spread * galaxy_vertical_bias * galaxy_position_scale / cell_size_map
+  -> 15.12 (approx).
+- p(cell_has_system) = systems_in_ring / cells_in_ring (cells_in_ring aus Ringflaeche * height_factor).
+
+Ring (r_norm) | Systeme | Zellen (est.) | p(cell)
+0.0-0.1       | 0       | 1885.3        | 0.0000000000
+0.1-0.2       | 46      | 5655.9        | 0.0081330570
+0.2-0.3       | 183     | 9426.5        | 0.0194132534
+0.3-0.4       | 653     | 13197.2       | 0.0494803062
+0.4-0.5       | 1847    | 16967.8       | 0.1088533059
+0.5-0.6       | 3684    | 20738.4       | 0.1776413944
+0.6-0.7       | 5979    | 24509.0       | 0.2439509077
+0.7-0.8       | 8360    | 28279.6       | 0.2956189401
+0.8-0.9       | 10105   | 32050.3       | 0.3152859615
+0.9-1.0       | 11143   | 35820.9       | 0.3110754706
+
+Hinweis: Diese Kurve ist eine Sample-Ableitung. Im finalen Generator kann die
+p(r)-Kurve direkt aus den erzeugten Systempositionen berechnet werden, damit
+sie exakt zur aktuellen Galaxy passt.
+Hinweis: Mit galaxy_position_scale = 18.0 liegt p(cell) unter 1.0,
+damit bleibt \"ein System pro Zelle\" plausibel.
+
+Offene Fragen (bitte festlegen)
+1) Keine offenen Entscheidungen mehr (alle Punkte festgelegt).
+
+Festgelegte Eckdaten (final)
+1) world_to_map_scale = 0.0000001 (1e-7), cell_size_world = 1.000.000, cell_size_map = 0.1.
+2) system_count = 42000, galaxy_position_scale = 18.0 (beibehalten).
+3) Ein System pro Zelle (keine Mehrfachsysteme).
+4) System-Groesse relativ zur Zelle: 50-80% der Zellkante (max. Orbit).
+   - Umsetzung: `system_cell_diameter_fraction_min/max` in `scripts/main.gd`,
+     skaliert System-Units so dass der maximale Orbit in der Welt zur Zellgroesse passt.
+5) Sky-Sphere: Sampling-Radius = 3 Zellen, Radius = 0.95 * camera_far.
+6) Savegames: alte Saves duerfen verworfen werden (keine Migration).
+
+Definitionen (Arbeitsbegriffe)
+- Map-Pos: Position im Galaxy-Koordinatensystem.
+- Cell-Pos: Diskrete Zell-ID (Vector3i).
+- Cell-Center: Map-Pos des Zellzentrums.
+- World-Pos: Absolute Spielwelt-Koordinaten (mit Floating Origin).

@@ -1,0 +1,146 @@
+Voxel Spaceshooter – Starmade-ähnlich (Konzept/Ideen)
+
+Das Spiel hat als Vorbild das Spiel Starmade: Raumschiffe/Raumstationen aus Voxeln bauen, Systeme managen, Ressourcen farmen, kämpfen, expandieren.
+
+
+Vision / Kernfantasie
+- „Ich baue mir ein Schiff aus Blöcken, fliege damit los, finde Ressourcen/POIs, verbessere und verteidige es.“
+- 3 große Säulen: Bauen (Kreativität) + Erkunden (Galaxie/Systeme/POIs) + Combat/Survival (Risiko/Belohnung).
+- Multiplayer-fähig (Koop/PvP optional), VR später als „Bonus“, aber Bedienung/UX früh mitdenken.
+
+
+Core-Block („Kernvoxel“) – Rolle & Funktionen
+- Ein Kern pro Struktur (Schiff/Station); bestimmt „Entity-ID“, Ownership, Faction und Berechtigungen.
+- Core-UI: Name, Status, Energie/Heat, Massenwerte, Triebwerkspower, Shield, Waffen-Gruppen, Docking-Liste.
+- „Baugrenzen“ optional: maximaler Blockcount/Powerlimit/CPU („Rechenkapazität“) abhängig vom Core-Tier.
+- Respawn/Recovery: Core kann ein „Notfall-Blueprint“ speichern (relevant für Multiplayer/Griefing).
+
+
+Voxel-/Block-System (Minimal-Design)
+Jeder Block hat klare Basiswerte:
+- cost (Ressourcen), mass, HP, Resistenzprofil, (optional) emissive, hitbox/connection.
+- power_draw / power_gen (Watt-Analog), heat_gen / heat_dissipation.
+- optional: signal ports (Logik), inventory slots (Cargo), ammo type, etc.
+
+Block-Kategorien (Ideen)
+- Struktur: Hull (leicht), Armor (schwer), Glass, Frame, Reinforced/Composite.
+- Energie: Reactor/Fuel-Generator, Solar, Battery/Capacitor, Power Relay/Bus (optional als „Kabel“-Konzept).
+- Antrieb: Thruster (gerichtet), RCS/Manöverdüsen, Gyro, Warp/Jump Drive (später).
+- Defense: Shield Emitter, Shield Capacitor, Point Defense, Countermeasures (Flares/ECM).
+- Sensorik: Kamera, Radar/Scanner (POIs, Ressourcen, Schiffe), Targeting Computer.
+- Weapons: Mining Laser, Laser, Kinetic Cannon, Missile Launcher, Railgun, Beam (Tiered).
+- Utility/Industrie: Cargo, Refinery, Assembler/Factory, Salvage Beam, Repair Beam.
+- Logik (Micro-Blocks im 0.2m-Format): Simple Gates (keine Skripte; deterministisch/MP-freundlich).
+	- Signal-Typen: Digital (bool) + Analog (float/int) als zwei getrennte „Bus“-Varianten/Blöcke (z.B. Digital-Wire vs. Analog-Wire).
+	- Converter-Blöcke: Threshold (Analog→Bool), Gate/Level (Bool→Analog, 0/1), Scale/Clamp (Analog→Analog) für Dinge wie Throttle/Shield-Priority.
+	- Analog-Ranges: wird später festgelegt (z.B. 0..1 oder -1..1); für Multiplayer/Determinismus optional intern quantisiert (z.B. 0..255 Schritte).
+- Deko/Interieur: Lights, Doors, Seats, Screens, Greebles, Paint/Decals.
+
+
+System-Simulation (damit es nach „Raumschiff“ fühlt)
+Energie-Netz (einfaches, gutes MVP)
+- Energie wird pro Tick erzeugt/gespeichert/verbraucht; bei Unterversorgung werden Systeme nach Priorität gedrosselt.
+- Prioritäten pro Systemgruppe: z.B. Life Support > Control > Shield > Engines > Weapons > Industrie.
+- Anzeigen: „Power Budget“ + „Worst Case“ (max Verbrauch) im Core-UI.
+
+Heat (optional, aber „cool“)
+- Waffen/Reactor erzeugen Heat; Radiatoren senken Heat; Overheat drosselt/disablet Systeme.
+- Heat kann später Damage verursachen (Leitungen, Explosionen), aber MVP: nur Drosselung.
+
+Flight-Model (Starmade-Feeling)
+- 6DoF mit sanfter Beschleunigung/Trägheit (COM/Trägheitsmoment beeinflusst Handling).
+- Thruster-Ausrichtung/Platzierung mattert (Schwerpunkt, Drehmoment, „Schiefzug“).
+- Flugmodi: Stabilize (auto-damp), Drift (kein Damp), „Combat Assist“ (limitierte Geschwindigkeit).
+
+
+Combat & Damage (Voxel-Charakter ausnutzen)
+- Damage-Philosophie: Mix, aber mit Simulation-Fokus (Subsysteme können ausfallen, Redundanz lohnt sich).
+- Schilde: Bubble-Shield regeneriert relativ schnell, aber mit Recharge-Delay nach Treffer (damit Druck/Burst sinnvoll bleibt); Shield zieht Power und kann bei Power-Defizit langsamer laden/abschalten.
+- Shields als Blocks: Shield Emitters bestimmen Max-Shield, Shield Capacitors bestimmen Recharge-Rate; Zerstörung reduziert Werte oder setzt das System offline.
+- Panzerung/Hull: Block-HP + Resistenz; Selbstreparatur nur mit Repair-System/Repair-Blocks (z.B. Repair Bay/Repair Beam), deutlich langsamer als Shield-Recharge; Reparatur kostet Power und verbraucht normale Bau-Materialien/Components direkt aus Cargo (kein spezielles Consumable).
+- Blueprint-Repair (gewünscht): Repair-System kann nicht nur Block-HP reparieren, sondern auch fehlende Blöcke automatisch wieder aufbauen (basierend auf Blueprint/„Repair from Blueprint“), solange Material im Cargo vorhanden ist.
+- Penetration/Bleedthrough (optional): kleiner Damage-Anteil kann durch Schilde gehen oder Kinetic kann intern „durchschlagen“ → gezielte Systemausfälle möglich, bevor Hull komplett weg ist.
+- Subsystem-Ausfälle: Leistung = Summe aktiver Blocks; unter Schwellenwert „degraded/offline“ (Engines/Weapons/Sensors/Shield/PowerGrid).
+- Waffentypen / Damage-Profile:
+	- Energy: konstant, wenig Recoil, zieht Power/Heat.
+	- Kinetic: Projectile, guter Hull-DPS, Ammo optional.
+	- Explosive: AoE, gut gegen Cluster, teurer.
+	- EMP/Ion: drain Shield/disable kurz (später).
+- Turrets/Hardpoints: Waffen haben Firing Arcs; Autotarget/Lead (Targeting-Computer).
+- Salvage Loop: zerstörte Schiffe → Wracks → Salvage (Ressourcen zurückholen).
+
+
+Bauen / UX (macht oder bricht das Spiel)
+- Build-Mode:
+	- Ghost-Preview, Snap/Grid, Rotation, Mirror/Symmetry.
+	- Multi-Block Placement (Brush), Copy/Paste, Blueprint-Module (Subassemblies).
+	- Undo/Redo, „Repair from Blueprint“ (fehlende Blöcke anzeigen).
+- Docking & Struktur-Management:
+	- Docking Ports: Strukturen andocken/abdocken (z.B. Shuttle an Mothership).
+	- Merge/Split: Docked Entities können optional „merged“ werden (Performance/Entity Count).
+- Innenraum:
+	- Türen, Lichter, Sitze, Cockpit/HUD, simple Luftschleuse (später).
+
+Aktueller Stand (Build-MVP im Projekt)
+	- Ghost-Preview: Halbtransparenter „Ghost Block“ zeigt das aktuelle Platzierungsziel (Kamera/Blickrichtung) auf der anvisierten Fläche (robuste Face-Erkennung, damit es aus allen Blickwinkeln zuverlässig klappt).
+	- Platzieren: Linke Maustaste gedrückt halten startet den Platzierungsmodus; beim Loslassen wird der Block platziert.
+		- Während LMB gedrückt bleibt, ist die zuerst anvisierte Fläche „gelockt“ (wechselt nicht auf andere Flächen); die Startposition bleibt gelockt und wird auf dieser Fläche im 0.2-Raster gesnappt.
+		- Erweiterung (Build-Tool): Während LMB gehalten wird, bleibt die gelockte Position/Fläche als Anker fix; der Block wird auf der Fläche in beiden tangentialen Achsen extrudiert (nicht gespiegelt, nur in Zugrichtung) und das Mausrad extrudiert die dritte Achse (Tiefe/Normal) statt den gesamten Block zu skalieren.
+		- Core-Block (Start einer Struktur): Core wird aktuell per Doppelklick im Inventar ca. 2m vor der Kamera gespawnt (erstellt eine neue Struktur; mehrfach möglich; Doppelklick übernimmt keine Blöcke in die Hotbar).
+		- Core-Regel: Pro Schiff/Station ist genau 1 Core erlaubt; zusätzliche Core-Blöcke werden beim Bauen blockiert (Core erst entfernen/ersetzen).
+	- Skalieren: Block-Skalierung per Mausrad in 0.2-Schritten (ohne Modifier = uniform; Shift = X; Ctrl = Y; Alt = Z) – funktioniert auch ohne gedrückte Maustaste (wenn kein Block gelockt/platziert wird).
+	- Thruster-Blöcke sind ebenfalls skalierbar; Thruster-Force skaliert mit dem Volumen (X*Y*Z).
+	- Platzierung (Skalierung): Beim Anbauen wird der Block so ausgerichtet/verschoben, dass er bündig auf der tatsächlich getroffenen Blockfläche sitzt (inkl. Scale/Offset; kein „Schweben“ bei kleiner Skalierung). Zusätzlich wird die Position auf der Fläche anhand des Hit-Punkts gewählt und auf ein 0.2-Raster gesnappt; Überlappungen mit anderen Blöcken werden blockiert (kein Eindringen bei großer Skalierung).
+	- Teilbelegte Flächen bleiben nutzbar: In der Zielzelle können mehrere Blöcke platziert werden, solange sie sich nicht überlappen (Overlap-Check).
+	- Abbau/Minen: Rechtsklick auf Block → Block wird entfernt und ins Inventar gelegt.
+	- UX-Fix: HUD/Hotbar fangen im Spielmodus keine Build-Klicks ab (Mouse-Filter wird passend gesetzt), damit Platzieren/Abbauen zuverlässig funktioniert.
+	- Hotbar: Aktiver Slot ist zusätzlich mit einem weißen Rahmen markiert.
+		- Rendering: Blöcke als farbige Instanzen per MultiMesh (Shape-Gruppen: Cube/Wedge/Corner); Skalierungs- und Offset-Metadata wird berücksichtigt.
+		- Physics/Control: ShipStructure baut pro Block passende Collision-Shapes (Box/Convex; inkl. Scale/Offset) und erkennt Core/Thruster (Steuerung nur mit Core).
+		- Armor-Formblöcke (neu): 3 Tiers (leicht/mittel/schwer) als Wedge/Corner:
+			- Wedge: `block_armor_light_wedge`, `block_armor_wedge` (mittel), `block_armor_heavy_wedge`
+			- Corner: `block_armor_light_corner`, `block_armor_corner` (mittel), `block_armor_heavy_corner`
+			- Farben (Platzhalter, später per Einfärben/Dyeing): leicht = grau, mittel = silber, schwer = gräuliches Weiß.
+			- Platzierung: beim Platzieren per WASD in 90°-Schritten rotierbar (während LMB gehalten wird), skalierbar/extrudierbar (0.2 Schritte) wie andere `can_scale`-Blöcke.
+			- Optik/Rendering: Flat-Normals/konstante Vertex-Colors + leichte „Panel/Plating“-Struktur (Shader-basiert). Für Wedge/Corner: Mesh nutzt clockwise Winding (Godot-Standard), damit Außenflächen bei Backface-Culling korrekt sichtbar sind; diagonale Flächen nutzen „dominant axis“ Projektion (statt triplanar-Blend), damit keine „verzerrten“ Verläufe/Schmier-Effekte entstehen und die Tiers unterscheidbar bleiben.
+	- Anti-Drift (Build-MVP): ShipStructure ist aktuell standardmäßig „gefreezed“ (RigidBody Freeze), damit der Spieler in 0G beim Bewegen/Anstoßen die Struktur nicht wegdrückt. Später: Pilot-/Unfreeze-Mode.
+	- Kamera (Minecraft-First-Person): Kamera sitzt auf „Eye Height“, Pitch ist begrenzt; im First-Person kann der Körper ausgeblendet werden (Roll/Third-Person Orbit/Zoom deaktiviert).
+
+
+Ressourcen, Crafting, Economy (Gameplay-Loop)
+- Mining: Asteroiden/Gürtel; Ressourcentypen (Erz → Ingot → Components).
+- Refinery/Assembler: Produktionskette (einfach starten: 2–3 Materialien + 1–2 Maschinen).
+- Cargo/Logistik: Container, Volumen/Masse, Transfer zwischen Docked Entities.
+- Stations/Trading: NPC-Stationen als sichere Häfen; Handel; Missionen (später).
+
+
+Erkundung & Weltinhalt (passt zu Galaxy-Map)
+- POIs: Derelicts, Ruinen, Mining-Outposts, Piratenbasen, Anomalien.
+- Hazards: Nebula (Sensor/Shield), Asteroidensturm, Radiation Zone, Gravity Wells (später).
+- Scanner: aktiver Ping + passiver Scan; POI-„Signaturen“ (Risiko/Belohnung).
+
+
+Multiplayer / Permissions (früh definieren)
+- Server-authoritative: Bauaktionen als Events (add/remove/rotate) statt kompletter Voxel-State.
+- Ownership/Faction/Rollen: Builder, Gunner, Pilot; Rechte für Docking/Inventar/Blueprints.
+- Anti-Grief Basics: Claim-Zonen, sichere Stationen, Offline-Protection/Decay (optional).
+
+
+Progression (Motivation ohne „Grind“)
+- Tech-Tiers: Core/Block-Tiers durch Blueprints/Research/Finds.
+- „Discovery“: seltene Blocks/Mods über POIs (statt nur Crafting).
+- Missions: Lieferaufträge, Salvage, Piratenjagd, Exploration „Scan X“.
+
+
+MVP-Vorschlag (klein anfangen, schnell spielbar)
+- 1) Minimal-Build: Core + Hull + Thruster + Reactor + Battery + 1 Waffe + Cargo.
+- 2) Mining-Loop: Asteroid → Ressource → 2–3 Rezepte → Upgrade.
+- 3) Combat-Loop: einfache Piraten-Drohnen + Loot/Salvage.
+- 4) Save/Load: Blueprint und Weltzustand (Core/Position/Inventar).
+
+Offene Fragen (entscheidet viel)
+- Voxel-Grundmaß: 1m, aber skalierbar in 0.2m-Schritten (min 0.2m); auch „gestreckt“ in Länge/Höhe/Breite für größere Blöcke (keine freie Skalierung, immer Snap auf 0.2).
+- Max-Blockcount pro Entity (Performance/Netzwerk).
+- Schild/Armor/Damage (Entscheidung): Mix mit Simulation-Fokus (schnell regenerierende Schilde, langsam selbstreparierende Armor/Hull, Systemausfälle).
+- Schild/Armor/Damage (tuning): Recharge-Delay, Shield-Bleedthrough/Penetration, Reparaturkosten/-bedingungen.
+- Logik (Entscheidung): Simple Gates genügen (kein mini-scriptable); Logik-Blöcke bevorzugt im 0.2m-Format für kompakte Bauweise; Signale als Digital+Analog (separate Bus-Varianten/Blöcke).
